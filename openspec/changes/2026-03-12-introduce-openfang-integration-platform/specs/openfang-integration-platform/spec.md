@@ -182,3 +182,24 @@
 - **THEN** 必须先完成边界、模型和协议冻结
 - **AND** 然后建设平台骨架
 - **AND** 首个场景只能作为平台插件接入，而不能反向定义平台结构
+
+## 指南：OpenFang 连接与测试流程
+
+### 连接概览
+
+- AgentX 通过 `framework/openfang/client/OpenfangRuntimeBridge.java` 及其 DTO（`framework/openfang/client/dto/`）调用已有的 OpenFang REST 接口：`POST /api/workflows/{id}/run`、`GET /api/tasks/{id}`、审批详情查询（或 `GET /api/approvals` 结合本地过滤）及 approve/reject 回调，完成任务创建、状态读取和审批回写。
+- `AgentxWorkflowResolver` 把场景编码解析成目标 `openfang_workflow_id + 版本`，`AgentxAuthorizationService` 在任何桥接调用前先求交 Agent 能力、用户委托和场景策略；高风险动作还由 `AgentxToolGuardService` 参考 `AgentxToolDescriptor`、`AgentxToolPolicy` 和风险控制目录进行额外筛选。
+- 审批桥由 `AgentxApprovalBridgeServiceImpl` 串联，它按照 `docs/deliverables/2026-03-12-openfang-interface-document.md` 描述的审批细节链路构建 `ApprovalRequest`、关联 `ApprovalBinding`、通过桥接写回决议，确保 OA 是审批真相的唯一源。
+- 上下文组装、审计和交付预期都在交付文档（`docs/deliverables/…`）中记录，确保每一个集成点都有书面契约。
+
+### 测试流程
+
+1. 本地先跑治理全量命令（`mvn -pl yudao-module-agentx -am -Dtest=AgentxPhase1GovernanceTest,AgentxPhase1GuardrailsTest,AgentxModuleBlueprintTest,AgentxObjectModelCatalogTest,AgentxDeliveryPackageTest,AgentxAcceptanceBaselineTest,LeaveFirstScenarioTest -Dsurefire.failIfNoSpecifiedTests=false -DforkCount=0 test`），确保治理对象、交付包与验收基线在不依赖 OpenFang 接口的情况下都通过。
+2. 部署或模拟一个 OpenFang 实例，调用文档中的接口确认 DTO 与实际 payload 匹配。
+3. 请假场景端到端演练：
+   - AgentX 通过 `POST /api/workflows/{workflowId}/run` 创建任务，拿到 `task_run_id` 并写入 `AgentxTaskProjectionDO`。
+   - 持续轮询 `GET /api/tasks/{task_run_id}`，检查 `pendingApprovalIds`、阶段信息和结果摘要，同时确保 `AgentxContextSnapshot`/`AgentxAuditEventDO` 字段被填充。
+   - 通过精确查询或 AgentX 索引获取审批详情，构建 `ApprovalRequest` 并通过 approve/reject 接口提交决议。
+   - 校验 `ApprovalBinding`、审计与 `AgentxAuditService` 记录是否与文档中描述的一致。
+4. 压力/异常测试：模拟授权失败、重复请求（幂等键）、审批回调乱序，验证 `AgentxToolGuardService`、`AgentxAuditService` 和 `AgentxApprovalWaitPolicy` 能正常处理。
+5. 用 `docs/deliverables/2026-03-12-openfang-first-scenario-acceptance-checklist.md` 的验收点逐项打勾，确认平台达标后再推进下一个场景。
