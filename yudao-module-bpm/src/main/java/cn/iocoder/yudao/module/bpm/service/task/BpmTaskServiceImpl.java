@@ -63,6 +63,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import javax.annotation.Resource;
 import javax.validation.Valid;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -1072,7 +1073,17 @@ public class BpmTaskServiceImpl implements BpmTaskService {
 
         // 2. 终止流程
         BpmnModel bpmnModel = modelService.getBpmnModelByDefinitionId(taskList.get(0).getProcessDefinitionId());
-        List<String> activityIds = CollUtil.newArrayList(convertSet(taskList, Task::getTaskDefinitionKey));
+        List<String> activityIds = taskList.stream().map(Task::getTaskDefinitionKey)
+                .filter(taskDefinitionKey -> StrUtil.isNotBlank(taskDefinitionKey)
+                        && bpmnModel.getFlowElement(taskDefinitionKey) != null)
+                .distinct()
+                .collect(Collectors.toList());
+        if (CollUtil.isEmpty(activityIds)) {
+            // 异常兜底：当前运行任务节点都无法在模型中定位时，直接删除实例，避免 Flowable 抛空指针
+            log.warn("[moveTaskToEnd][processInstanceId({}) 未找到可跳转节点，直接删除流程实例]", processInstanceId);
+            runtimeService.deleteProcessInstance(processInstanceId, reason);
+            return;
+        }
         EndEvent endEvent = BpmnModelUtils.getEndEvent(bpmnModel);
         Assert.notNull(endEvent, "结束节点不能为空");
         runtimeService.createChangeActivityStateBuilder()
