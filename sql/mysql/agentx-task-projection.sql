@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS `agentx_task_projection` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `tenant_id` BIGINT NOT NULL DEFAULT 0,
+    `scenario_code` VARCHAR(64) NOT NULL,
+    `business_key` VARCHAR(128) NOT NULL,
+    `idempotency_key` VARCHAR(128) DEFAULT NULL,
+    `openfang_task_run_id` VARCHAR(64) NOT NULL,
+    `projection_status` TINYINT NOT NULL,
+    `risk_level` TINYINT DEFAULT NULL,
+    `result_summary` VARCHAR(1024) DEFAULT NULL,
+    `failure_summary` VARCHAR(1024) DEFAULT NULL,
+    `audit_summary` VARCHAR(1024) DEFAULT NULL,
+    `creator` VARCHAR(64) DEFAULT '',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updater` VARCHAR(64) DEFAULT '',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted` BIT(1) NOT NULL DEFAULT b'0',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tenant_idempotency_key` (`tenant_id`, `idempotency_key`, `deleted`),
+    UNIQUE KEY `uk_tenant_openfang_task_run_id` (`tenant_id`, `openfang_task_run_id`, `deleted`),
+    KEY `idx_tenant_business_key` (`tenant_id`, `business_key`, `deleted`),
+    KEY `idx_tenant_scenario_status` (`tenant_id`, `scenario_code`, `projection_status`, `deleted`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COMMENT = 'AgentX 任务投影';
