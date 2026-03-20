@@ -11,6 +11,8 @@ import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangApprovalDet
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangTaskRespDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunReqDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunRespDTO;
+import cn.iocoder.yudao.module.bpm.api.task.dto.BpmProcessInstanceCreateReqDTO;
+import cn.iocoder.yudao.module.bpm.service.task.BpmProcessInstanceService;
 import cn.iocoder.yudao.module.agentx.service.approval.AgentxApprovalBridgeService;
 import cn.iocoder.yudao.module.agentx.service.approval.AgentxApprovalBridgeServiceImpl;
 import cn.iocoder.yudao.module.agentx.service.approval.AgentxApprovalOutcome;
@@ -46,11 +48,14 @@ class AgentxTaskLifecycleServiceTest {
         AtomicReference<AgentxApprovalBindingDO> updatedBinding = new AtomicReference<>();
         AtomicReference<String> approvedId = new AtomicReference<>();
         AtomicReference<String> approvedComment = new AtomicReference<>();
+        AtomicReference<Long> bpmStarterId = new AtomicReference<>();
+        AtomicReference<BpmProcessInstanceCreateReqDTO> bpmCreateReq = new AtomicReference<>();
         List<String> auditEvents = new CopyOnWriteArrayList<>();
         OpenfangRuntimeBridge runtimeBridge = proxyRuntimeBridge(approvedId, approvedComment);
         AgentxTaskProjectionMapper projectionMapper = proxyProjectionMapper(insertedProjection, updatedProjections);
         AgentxApprovalBindingMapper bindingMapper = proxyBindingMapper(insertedBinding, updatedBinding);
         AgentxAuditService auditService = proxyAuditService(auditEvents);
+        BpmProcessInstanceService processInstanceService = proxyBpmProcessInstanceService(bpmStarterId, bpmCreateReq);
 
         AgentxTaskOrchestrationService orchestrationService = new AgentxTaskOrchestrationService(new AgentxWorkflowResolver());
         ReflectionTestUtils.setField(orchestrationService, "taskProjectionMapper", projectionMapper);
@@ -60,6 +65,7 @@ class AgentxTaskLifecycleServiceTest {
         ReflectionTestUtils.setField(approvalBridgeService, "approvalBindingMapper", bindingMapper);
         ReflectionTestUtils.setField(approvalBridgeService, "taskProjectionMapper", projectionMapper);
         ReflectionTestUtils.setField(approvalBridgeService, "runtimeBridge", runtimeBridge);
+        ReflectionTestUtils.setField(approvalBridgeService, "bpmProcessInstanceService", processInstanceService);
 
         AgentxTaskLifecycleService lifecycleService = new AgentxTaskLifecycleService(
                 orchestrationService, approvalBridgeService, runtimeBridge, auditService);
@@ -76,7 +82,7 @@ class AgentxTaskLifecycleServiceTest {
                 Collections.singletonList(new AgentxWorkflowMapping("oa.leave.approval", "leave-workflow", "v1", true)));
 
         AgentxApprovalRequest approvalRequest = lifecycleService.pullPendingApprovalRequest(projection);
-        AgentxApprovalBindingDO binding = lifecycleService.createApprovalBinding(projection, approvalRequest, "bpm-99");
+        AgentxApprovalBindingDO binding = lifecycleService.createApprovalBindingWithBpm(projection, approvalRequest);
         lifecycleService.resolveApproval(binding, 99L, AgentxApprovalBridgeService.ApprovalDecision.APPROVED, "同意");
 
         assertEquals("task-run-1", projection.getOpenfangTaskRunId());
@@ -88,6 +94,9 @@ class AgentxTaskLifecycleServiceTest {
         assertEquals("年假 2 天", approvalRequest.getReason());
         assertEquals("approval-1", insertedBinding.get().getOpenfangApprovalId());
         assertEquals("bpm-99", insertedBinding.get().getBpmProcessInstanceId());
+        assertEquals(Long.valueOf(1L), bpmStarterId.get());
+        assertEquals("oa_leave", bpmCreateReq.get().getProcessDefinitionKey());
+        assertEquals("leave:99", bpmCreateReq.get().getBusinessKey());
         assertEquals(Long.valueOf(99L), updatedBinding.get().getId());
         assertEquals("approval-1", approvedId.get());
         assertEquals("同意", approvedComment.get());
@@ -214,7 +223,7 @@ class AgentxTaskLifecycleServiceTest {
                         response.setTaskStatus("RUNNING");
                         return response;
                     }
-                    if ("getTask".equals(method.getName())) {
+                    if ("getTaskRun".equals(method.getName()) || "getTask".equals(method.getName())) {
                         OpenfangTaskRespDTO task = new OpenfangTaskRespDTO();
                         task.setTaskRunId((String) args[0]);
                         task.setStatus("WAITING_APPROVAL");
@@ -301,6 +310,28 @@ class AgentxTaskLifecycleServiceTest {
                             .replace("recordPendingApproval", "TASK_WAITING_APPROVAL")
                             .replace("recordApprovalDecision", "APPROVAL_APPROVED")
                             .replace("recordAuthorizationDenied", "AUTHORIZATION_DENIED"));
+                    return null;
+                });
+    }
+
+    @SuppressWarnings("unchecked")
+    private BpmProcessInstanceService proxyBpmProcessInstanceService(AtomicReference<Long> userIdSink,
+                                                                     AtomicReference<BpmProcessInstanceCreateReqDTO> reqSink) {
+        return (BpmProcessInstanceService) Proxy.newProxyInstance(
+                BpmProcessInstanceService.class.getClassLoader(),
+                new Class<?>[] { BpmProcessInstanceService.class },
+                (proxy, method, args) -> {
+                    if ("createProcessInstance".equals(method.getName())) {
+                        userIdSink.set((Long) args[0]);
+                        reqSink.set((BpmProcessInstanceCreateReqDTO) args[1]);
+                        return "bpm-99";
+                    }
+                    if (method.getReturnType().equals(boolean.class)) {
+                        return false;
+                    }
+                    if (method.getReturnType().equals(int.class) || method.getReturnType().equals(long.class)) {
+                        return 0;
+                    }
                     return null;
                 });
     }

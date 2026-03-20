@@ -9,7 +9,7 @@ import java.util.List;
 public class LeaveToolSet {
 
     public List<String> toolCodes() {
-        return Arrays.asList("leave.query", "leave.submit");
+        return Arrays.asList("bpm_query_tasks", "bpm_approve");
     }
 
 }

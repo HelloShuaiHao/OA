@@ -79,7 +79,7 @@ public class AgentxTaskLifecycleService {
     }
 
     public AgentxApprovalRequest pullPendingApprovalRequest(AgentxTaskProjectionDO projection) {
-        OpenfangTaskRespDTO task = runtimeBridge.getTask(projection.getOpenfangTaskRunId());
+        OpenfangTaskRespDTO task = runtimeBridge.getTaskRun(projection.getOpenfangTaskRunId());
         orchestrationService.refreshProjection(projection, task);
         if (task.getPendingApprovalIds() == null || task.getPendingApprovalIds().isEmpty()) {
             return null;
@@ -94,6 +94,12 @@ public class AgentxTaskLifecycleService {
     public AgentxApprovalBindingDO createApprovalBinding(AgentxTaskProjectionDO projection,
                                                          AgentxApprovalRequest request,
                                                          String bpmProcessInstanceId) {
+        return approvalBridgeService.createApprovalBinding(projection, request, bpmProcessInstanceId);
+    }
+
+    public AgentxApprovalBindingDO createApprovalBindingWithBpm(AgentxTaskProjectionDO projection,
+                                                                AgentxApprovalRequest request) {
+        String bpmProcessInstanceId = approvalBridgeService.createBpmProcessInstance(request);
         return approvalBridgeService.createApprovalBinding(projection, request, bpmProcessInstanceId);
     }
 

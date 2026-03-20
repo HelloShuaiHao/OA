@@ -18,6 +18,8 @@ public interface AgentxApprovalBridgeService {
 
     AgentxBpmApprovalCreateReq buildBpmCreateRequest(AgentxApprovalRequest request);
 
+    String createBpmProcessInstance(AgentxApprovalRequest request);
+
     void syncDecision(Long approvalBindingId, Long taskProjectionId, ApprovalDecision decision);
 
     AgentxApprovalResolution resolveOutcome(Long approvalBindingId, Long taskProjectionId, AgentxApprovalOutcome outcome);

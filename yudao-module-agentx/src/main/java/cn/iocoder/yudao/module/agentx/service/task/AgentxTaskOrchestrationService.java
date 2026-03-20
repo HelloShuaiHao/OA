@@ -12,8 +12,10 @@ import cn.iocoder.yudao.module.agentx.service.authorization.AgentxCapability;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowMapping;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowResolution;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowResolver;
+import org.springframework.dao.DuplicateKeyException;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -35,6 +37,16 @@ public class AgentxTaskOrchestrationService {
     }
 
     public AgentxTaskProjectionDO startTask(AgentxTaskStartRequest request, List<AgentxWorkflowMapping> mappings) {
+        return createTask(request, mappings);
+    }
+
+    public AgentxTaskProjectionDO createTask(AgentxTaskStartRequest request, List<AgentxWorkflowMapping> mappings) {
+        if (request.getIdempotencyKey() != null) {
+            AgentxTaskProjectionDO existing = taskProjectionMapper.selectByIdempotencyKey(request.getIdempotencyKey());
+            if (existing != null) {
+                return existing;
+            }
+        }
         AgentxWorkflowResolution resolution = workflowResolver.resolve(
                 request.getScenarioCode(), request.getWorkflowVersion(), mappings);
         OpenfangWorkflowRunRespDTO response = runtimeBridge.runWorkflow(resolution.getOpenfangWorkflowId(),
@@ -46,8 +58,22 @@ public class AgentxTaskOrchestrationService {
         projection.setOpenfangTaskRunId(response.getTaskRunId());
         projection.setProjectionStatus(AgentxTaskProjectionStatusEnum.RUNNING.getStatus());
         projection.setRiskLevel(AgentxRiskLevelEnum.MEDIUM.getLevel());
-        taskProjectionMapper.insert(projection);
+        try {
+            taskProjectionMapper.insert(projection);
+        } catch (DuplicateKeyException ex) {
+            if (request.getIdempotencyKey() != null) {
+                AgentxTaskProjectionDO existing = taskProjectionMapper.selectByIdempotencyKey(request.getIdempotencyKey());
+                if (existing != null) {
+                    return existing;
+                }
+            }
+            throw ex;
+        }
         return projection;
+    }
+
+    public OpenfangTaskRespDTO getTaskRun(String taskRunId) {
+        return runtimeBridge.getTaskRun(taskRunId);
     }
 
     public void refreshProjection(AgentxTaskProjectionDO existing, OpenfangTaskRespDTO task) {
@@ -60,10 +86,34 @@ public class AgentxTaskOrchestrationService {
         taskProjectionMapper.updateById(update);
     }
 
+    public Integer nextPollIntervalSeconds(int attempt) {
+        int normalizedAttempt = Math.max(1, attempt);
+        int interval = (int) Math.pow(2, normalizedAttempt);
+        return Math.min(interval, 30);
+    }
+
+    public boolean markFailedIfTimedOut(AgentxTaskProjectionDO projection, LocalDateTime now) {
+        if (projection == null || projection.getUpdateTime() == null || projection.getProjectionStatus() == null) {
+            return false;
+        }
+        if (isTerminalStatus(projection.getProjectionStatus())) {
+            return false;
+        }
+        if (projection.getUpdateTime().isAfter(now.minusHours(24))) {
+            return false;
+        }
+        AgentxTaskProjectionDO update = new AgentxTaskProjectionDO();
+        update.setId(projection.getId());
+        update.setProjectionStatus(AgentxTaskProjectionStatusEnum.FAILED.getStatus());
+        update.setFailureSummary("Task 24 小时无更新，自动失败");
+        taskProjectionMapper.updateById(update);
+        return true;
+    }
+
     private OpenfangWorkflowRunReqDTO buildRunRequest(AgentxTaskStartRequest request, String workflowId,
                                                       Set<AgentxCapability> capabilities) {
         OpenfangWorkflowRunReqDTO dto = new OpenfangWorkflowRunReqDTO();
-        dto.setScenarioCode(workflowId);
+        dto.setScenarioCode(request.getScenarioCode());
         dto.setBusinessKey(request.getBusinessKey());
         dto.setIdempotencyKey(request.getIdempotencyKey());
         dto.setPrincipalType(request.getPrincipalType());
@@ -75,16 +125,25 @@ public class AgentxTaskOrchestrationService {
     }
 
     private Integer mapStatus(String status) {
-        if ("WAITING_APPROVAL".equals(status)) {
+        if ("WAITING_APPROVAL".equalsIgnoreCase(status) || "waiting_for_approval".equalsIgnoreCase(status)) {
             return AgentxTaskProjectionStatusEnum.WAITING_APPROVAL.getStatus();
         }
-        if ("SUCCEEDED".equals(status)) {
+        if ("SUCCEEDED".equalsIgnoreCase(status) || "succeeded".equalsIgnoreCase(status)) {
             return AgentxTaskProjectionStatusEnum.SUCCEEDED.getStatus();
         }
-        if ("FAILED".equals(status)) {
+        if ("FAILED".equalsIgnoreCase(status)
+                || "failed_recoverable".equalsIgnoreCase(status)
+                || "failed_terminal".equalsIgnoreCase(status)
+                || "cancelled".equalsIgnoreCase(status)) {
             return AgentxTaskProjectionStatusEnum.FAILED.getStatus();
         }
         return AgentxTaskProjectionStatusEnum.RUNNING.getStatus();
+    }
+
+    private boolean isTerminalStatus(Integer status) {
+        return AgentxTaskProjectionStatusEnum.SUCCEEDED.getStatus().equals(status)
+                || AgentxTaskProjectionStatusEnum.FAILED.getStatus().equals(status)
+                || AgentxTaskProjectionStatusEnum.COMPENSATED.getStatus().equals(status);
     }
 
 }

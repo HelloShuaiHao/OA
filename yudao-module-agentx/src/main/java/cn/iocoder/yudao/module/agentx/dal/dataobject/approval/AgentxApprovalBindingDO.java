@@ -23,6 +23,9 @@ public class AgentxApprovalBindingDO extends BaseDO {
     private String bpmProcessInstanceId;
     private Integer riskLevel;
     private Integer decisionStatus;
+    private Integer callbackRetryCount;
+    private Boolean callbackFailed;
+    private String callbackLastError;
     private String actionSummary;
 
 }

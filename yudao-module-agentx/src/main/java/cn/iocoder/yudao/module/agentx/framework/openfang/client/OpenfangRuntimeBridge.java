@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.agentx.framework.openfang.client;
 
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangApprovalDetailRespDTO;
+import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangHealthRespDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangTaskRespDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunReqDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunRespDTO;
@@ -14,10 +15,24 @@ public interface OpenfangRuntimeBridge {
 
     OpenfangTaskRespDTO getTask(String taskRunId);
 
+    default OpenfangTaskRespDTO getTaskRun(String taskRunId) {
+        return getTask(taskRunId);
+    }
+
     OpenfangApprovalDetailRespDTO getApprovalDetail(String taskRunId, String approvalId);
 
     void approve(String approvalId, String decisionComment);
 
     void reject(String approvalId, String decisionComment);
+
+    default void approveCallback(String approvalId, String decisionComment) {
+        approve(approvalId, decisionComment);
+    }
+
+    default void rejectCallback(String approvalId, String decisionComment) {
+        reject(approvalId, decisionComment);
+    }
+
+    OpenfangHealthRespDTO health(String baseUrl, String accessToken);
 
 }

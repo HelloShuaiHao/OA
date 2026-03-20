@@ -3,6 +3,7 @@ package cn.iocoder.yudao.module.agentx.framework.openfang.client;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.agentx.framework.openfang.config.AgentxOpenfangProperties;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangApprovalDetailRespDTO;
+import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangHealthRespDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangTaskRespDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunReqDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunRespDTO;
@@ -14,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -40,6 +42,11 @@ class OpenfangRuntimeBridgeHttpClientTest {
         assertEquals("http://openfang.test/api/workflows/wf-1/run", url.get());
         assertEquals("Bearer token-1", entityRef.get().getHeaders().getFirst(HttpHeaders.AUTHORIZATION));
         assertTrue(entityRef.get().getHeaders().getContentType().includes(MediaType.APPLICATION_JSON));
+        Object body = entityRef.get().getBody();
+        assertTrue(body instanceof java.util.Map);
+        Object input = ((java.util.Map<?, ?>) body).get("input");
+        assertTrue(input instanceof String);
+        assertTrue(((String) input).contains("\"business_key\":\"leave:1\""));
     }
 
     @Test
@@ -100,6 +107,21 @@ class OpenfangRuntimeBridgeHttpClientTest {
         assertEquals("拒绝", ((java.util.Map<?, ?>) entityRef.get().getBody()).get("comment"));
     }
 
+    @Test
+    void shouldProbeHealthByDynamicBaseUrl() {
+        AtomicReference<String> url = new AtomicReference<>();
+        RestTemplate restTemplate = new CapturingRestTemplate(url, null,
+                ResponseEntity.ok(Collections.singletonMap("version", "0.3.0")));
+        AgentxOpenfangProperties properties = new AgentxOpenfangProperties();
+        properties.setBaseUrl("http://openfang.default");
+        OpenfangRuntimeBridgeHttpClient client = new OpenfangRuntimeBridgeHttpClient(restTemplate, properties);
+
+        OpenfangHealthRespDTO healthRespDTO = client.health("http://openfang.health", "token-x");
+        assertEquals("http://openfang.health/health", url.get());
+        assertTrue(Boolean.TRUE.equals(healthRespDTO.getOnline()));
+        assertEquals("0.3.0", healthRespDTO.getVersion());
+    }
+
     private static class CapturingRestTemplate extends RestTemplate {
 
         private final AtomicReference<String> url;
@@ -122,6 +144,18 @@ class OpenfangRuntimeBridgeHttpClientTest {
         public <T> ResponseEntity<T> exchange(String url, HttpMethod method, HttpEntity<?> requestEntity,
                                               org.springframework.core.ParameterizedTypeReference<T> responseType,
                                               Object... uriVariables) {
+            this.url.set(url);
+            if (entityRef != null) {
+                this.entityRef.set(requestEntity);
+            }
+            captureMethod(method);
+            return (ResponseEntity<T>) response;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> ResponseEntity<T> exchange(String url, HttpMethod method, HttpEntity<?> requestEntity,
+                                              Class<T> responseType, Object... uriVariables) {
             this.url.set(url);
             if (entityRef != null) {
                 this.entityRef.set(requestEntity);

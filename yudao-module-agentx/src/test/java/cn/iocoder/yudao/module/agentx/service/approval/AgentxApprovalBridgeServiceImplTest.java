@@ -8,10 +8,13 @@ import cn.iocoder.yudao.module.agentx.dal.mysql.task.AgentxTaskProjectionMapper;
 import cn.iocoder.yudao.module.agentx.enums.AgentxTaskProjectionStatusEnum;
 import cn.iocoder.yudao.module.agentx.framework.openfang.client.OpenfangRuntimeBridge;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangApprovalDetailRespDTO;
+import cn.iocoder.yudao.module.bpm.api.task.dto.BpmProcessInstanceCreateReqDTO;
+import cn.iocoder.yudao.module.bpm.service.task.BpmProcessInstanceService;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Proxy;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static cn.iocoder.yudao.framework.test.core.util.RandomUtils.randomLongId;
@@ -122,6 +125,58 @@ class AgentxApprovalBridgeServiceImplTest {
     }
 
     @Test
+    void shouldCreateBpmProcessInstanceFromApprovalRequest() {
+        AtomicReference<Long> capturedUserId = new AtomicReference<>();
+        AtomicReference<BpmProcessInstanceCreateReqDTO> capturedReq = new AtomicReference<>();
+        AgentxApprovalBridgeServiceImpl service = createService(
+                proxy(AgentxApprovalBindingMapper.class, new AtomicReference<>(), "insert"),
+                proxy(AgentxTaskProjectionMapper.class, new AtomicReference<>(), "updateById"),
+                null,
+                (BpmProcessInstanceService) Proxy.newProxyInstance(
+                        BpmProcessInstanceService.class.getClassLoader(),
+                        new Class<?>[] { BpmProcessInstanceService.class },
+                        (proxy, method, args) -> {
+                            if ("createProcessInstance".equals(method.getName())) {
+                                capturedUserId.set((Long) args[0]);
+                                capturedReq.set((BpmProcessInstanceCreateReqDTO) args[1]);
+                                return "bpm-101";
+                            }
+                            if (method.getReturnType().equals(boolean.class)) {
+                                return false;
+                            }
+                            if (method.getReturnType().equals(int.class) || method.getReturnType().equals(long.class)) {
+                                return 0;
+                            }
+                            return null;
+                        }));
+
+        AgentxApprovalRequest request = new AgentxApprovalRequest()
+                .setScenarioCode("oa.leave.approval")
+                .setBusinessKey("leave:12")
+                .setOpenfangTaskRunId("task-run-1")
+                .setOpenfangApprovalId("approval-1")
+                .setTitle("请假提交审批")
+                .setReason("年假 2 天")
+                .setRiskLevel(20)
+                .setActionSummary("提交请假单")
+                .setRequesterId("u-1")
+                .setApproverSource("dept-manager")
+                .setApproverRef("dept:tech");
+
+        String bpmInstanceId = service.createBpmProcessInstance(request);
+
+        assertEquals("bpm-101", bpmInstanceId);
+        assertEquals(Long.valueOf(1L), capturedUserId.get());
+        assertEquals("oa_leave", capturedReq.get().getProcessDefinitionKey());
+        assertEquals("leave:12", capturedReq.get().getBusinessKey());
+        Map<String, Object> variables = capturedReq.get().getVariables();
+        assertEquals("请假提交审批", variables.get("title"));
+        assertEquals("提交请假单 | 年假 2 天", variables.get("summary"));
+        assertEquals("approval-1", variables.get("approvalId"));
+        assertEquals("task-run-1", variables.get("taskRunId"));
+    }
+
+    @Test
     void shouldSyncApprovalDecisionToBindingAndProjection() {
         AtomicReference<AgentxApprovalBindingDO> updatedBinding = new AtomicReference<>();
         AtomicReference<AgentxTaskProjectionDO> updatedProjection = new AtomicReference<>();
@@ -157,10 +212,18 @@ class AgentxApprovalBridgeServiceImplTest {
     private AgentxApprovalBridgeServiceImpl createService(AgentxApprovalBindingMapper bindingMapper,
                                                           AgentxTaskProjectionMapper projectionMapper,
                                                           OpenfangRuntimeBridge runtimeBridge) {
+        return createService(bindingMapper, projectionMapper, runtimeBridge, null);
+    }
+
+    private AgentxApprovalBridgeServiceImpl createService(AgentxApprovalBindingMapper bindingMapper,
+                                                          AgentxTaskProjectionMapper projectionMapper,
+                                                          OpenfangRuntimeBridge runtimeBridge,
+                                                          BpmProcessInstanceService processInstanceService) {
         AgentxApprovalBridgeServiceImpl service = new AgentxApprovalBridgeServiceImpl();
         ReflectionTestUtils.setField(service, "approvalBindingMapper", bindingMapper);
         ReflectionTestUtils.setField(service, "taskProjectionMapper", projectionMapper);
         ReflectionTestUtils.setField(service, "runtimeBridge", runtimeBridge);
+        ReflectionTestUtils.setField(service, "bpmProcessInstanceService", processInstanceService);
         return service;
     }
 

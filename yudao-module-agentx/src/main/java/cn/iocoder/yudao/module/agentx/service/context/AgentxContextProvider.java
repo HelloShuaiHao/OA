@@ -1,10 +1,8 @@
 package cn.iocoder.yudao.module.agentx.service.context;
 
 /**
- * AgentX 上下文提供器。
+ * 兼容旧命名的上下文提供器接口。
  */
-public interface AgentxContextProvider {
-
-    ContextContribution provide(AgentxContextRequest request);
-
+@Deprecated
+public interface AgentxContextProvider extends ContextProvider {
 }

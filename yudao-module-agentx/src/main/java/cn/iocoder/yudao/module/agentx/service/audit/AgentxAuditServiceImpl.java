@@ -8,16 +8,20 @@ import cn.iocoder.yudao.module.agentx.service.approval.AgentxApprovalBridgeServi
 import cn.iocoder.yudao.module.agentx.service.approval.AgentxApprovalRequest;
 import cn.iocoder.yudao.module.agentx.service.identity.ExecutionIdentity;
 import cn.iocoder.yudao.module.agentx.service.tool.AgentxDataScope;
+import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 
 /**
  * AgentX 审计服务实现。
  */
+@Service
 public class AgentxAuditServiceImpl implements AgentxAuditService {
 
     @Resource
     private AgentxAuditEventMapper auditEventMapper;
+    @Resource
+    private AgentxAuditDesensitizeService desensitizeService;
 
     @Override
     public void recordTaskStarted(AgentxTaskProjectionDO projection) {
@@ -27,7 +31,18 @@ public class AgentxAuditServiceImpl implements AgentxAuditService {
                 .setBusinessKey(projection.getBusinessKey())
                 .setOpenfangTaskRunId(projection.getOpenfangTaskRunId())
                 .setRiskLevel(projection.getRiskLevel())
-                .setResultSummary("task started"));
+                .setResultSummary(mask("task started")));
+    }
+
+    @Override
+    public void recordTaskCompleted(AgentxTaskProjectionDO projection) {
+        auditEventMapper.insert(new AgentxAuditEventDO()
+                .setEventType("TASK_COMPLETED")
+                .setScenarioCode(projection.getScenarioCode())
+                .setBusinessKey(projection.getBusinessKey())
+                .setOpenfangTaskRunId(projection.getOpenfangTaskRunId())
+                .setRiskLevel(projection.getRiskLevel())
+                .setResultSummary(mask(projection.getResultSummary())));
     }
 
     @Override
@@ -39,7 +54,7 @@ public class AgentxAuditServiceImpl implements AgentxAuditService {
                 .setOpenfangTaskRunId(projection.getOpenfangTaskRunId())
                 .setOpenfangApprovalId(request.getOpenfangApprovalId())
                 .setRiskLevel(request.getRiskLevel())
-                .setResultSummary(request.getActionSummary()));
+                .setResultSummary(mask(request.getActionSummary())));
     }
 
     @Override
@@ -51,7 +66,7 @@ public class AgentxAuditServiceImpl implements AgentxAuditService {
                 .setOpenfangTaskRunId(binding.getOpenfangTaskRunId())
                 .setOpenfangApprovalId(binding.getOpenfangApprovalId())
                 .setRiskLevel(binding.getRiskLevel())
-                .setResultSummary(binding.getActionSummary()));
+                .setResultSummary(mask(binding.getActionSummary())));
     }
 
     @Override
@@ -60,7 +75,7 @@ public class AgentxAuditServiceImpl implements AgentxAuditService {
                 .setEventType("AUTHORIZATION_DENIED")
                 .setScenarioCode(scenarioCode)
                 .setBusinessKey(businessKey)
-                .setResultSummary(reason));
+                .setResultSummary(mask(reason)));
     }
 
     @Override
@@ -77,7 +92,7 @@ public class AgentxAuditServiceImpl implements AgentxAuditService {
                 .setToolName(toolName)
                 .setRiskLevel(riskLevel)
                 .setDataScopeSummary(dataScope != null ? dataScope.summarize() : null)
-                .setResultSummary(result));
+                .setResultSummary(mask(result)));
     }
 
     @Override
@@ -95,11 +110,15 @@ public class AgentxAuditServiceImpl implements AgentxAuditService {
                 .setToolName(toolName)
                 .setRiskLevel(riskLevel)
                 .setDataScopeSummary(dataScope != null ? dataScope.summarize() : null)
-                .setRequestSummary(requestSummary)
-                .setResultSummary(resultSummary)
+                .setRequestSummary(mask(requestSummary))
+                .setResultSummary(mask(resultSummary))
                 .setDurationMs(durationMs)
                 .setErrorCode(errorCode)
-                .setBusinessImpactSummary(businessImpactSummary));
+                .setBusinessImpactSummary(mask(businessImpactSummary)));
+    }
+
+    private String mask(String value) {
+        return desensitizeService.mask(value);
     }
 
 }

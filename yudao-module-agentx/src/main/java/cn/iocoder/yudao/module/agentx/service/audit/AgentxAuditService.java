@@ -14,6 +14,8 @@ public interface AgentxAuditService {
 
     void recordTaskStarted(AgentxTaskProjectionDO projection);
 
+    void recordTaskCompleted(AgentxTaskProjectionDO projection);
+
     void recordPendingApproval(AgentxTaskProjectionDO projection, AgentxApprovalRequest request);
 
     void recordApprovalDecision(AgentxApprovalBindingDO binding, AgentxApprovalBridgeService.ApprovalDecision decision);

@@ -8,6 +8,7 @@ public enum ContextSource {
     CRM,
     KNOWLEDGE_BASE,
     USER_PROFILE,
-    ORGANIZATION
+    ORGANIZATION,
+    API
 
 }
