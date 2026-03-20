@@ -1,0 +1,15 @@
+{
+  "name": "leave-approval-assistant",
+  "description": "OA 请假审批助手（AgentX Phase 1, OpenFang v0.3.3 API）",
+  "steps": [
+    {
+      "name": "leave-approval",
+      "agent_name": "oa-leave-workflow-runner",
+      "prompt": "你是 OA 请假审批助手。严格按以下步骤执行，不要只查询不处理：\\n1) 先调用 bpm_query_tasks，参数至少包含 user_id，建议 limit=20，并设置 leave_only=true。\\n2) 从返回列表中逐条读取任务的 leaveDays（数字）。\\n3) 对每条任务都必须调用 bpm_approve：\\n   - leaveDays <= 2：approved=true，reason 写明“自动审批：请假天数 <= 2”。\\n   - leaveDays > 2：approved=false，reason 写明“请假天数 > 2，触发人工审批流程”。\\n4) 若没有可处理任务，明确输出“无待处理请假任务”。\\n5) 最后输出简要摘要（处理总数、通过数、驳回数、失败数）。\\n输入：{{input}}",
+      "mode": "sequential",
+      "timeout_secs": 120,
+      "error_mode": "fail",
+      "output_var": "approval_result"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+name: leave-approval-assistant
+version: 1.0.0
+description: OA 请假审批助手（Phase 1）
+
+inputs:
+  - name: user_id
+    type: number
+    required: true
+  - name: scenario_code
+    type: string
+    required: true
+  - name: business_key
+    type: string
+    required: true
+
+tools:
+  - name: bpm_query_tasks
+    purpose: 查询待审批请假列表
+  - name: bpm_approve
+    purpose: 执行请假审批决策
+
+steps:
+  - id: query_pending_tasks
+    type: tool
+    tool: bpm_query_tasks
+    input:
+      userId: "${input.user_id}"
+      scenarioCode: "${input.scenario_code}"
+
+  - id: analyze_risk_level
+    type: llm
+    instruction: |
+      你是请假审批助手。规则：
+      1) 请假天数 <= 2 天，自动通过；
+      2) 请假天数 > 2 天，返回 approval_required=true 并给出原因；
+      输出 JSON 数组，每项包含 taskId、approved、reason、approval_required。
+    input:
+      tasks: "${steps.query_pending_tasks.output.tasks}"
+
+  - id: execute_approvals
+    type: foreach
+    items: "${steps.analyze_risk_level.output}"
+    do:
+      type: tool
+      tool: bpm_approve
+      input:
+        taskId: "${item.taskId}"
+        approved: "${item.approved}"
+        reason: "${item.reason}"
+        approvalRequired: "${item.approval_required}"
+
+outputs:
+  summary: "${steps.execute_approvals.summary}"

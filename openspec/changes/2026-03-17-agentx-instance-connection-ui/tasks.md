@@ -10,94 +10,94 @@
 
 ## 2. 实例管理层（1.5 天）
 
-- [ ] 2.1 创建 `AgentxOpenfangInstanceDO` 和 Mapper
-- [ ] 2.2 实现 `OpenfangInstanceService`（CRUD + 连接测试）
-- [ ] 2.3 实现密钥加密/解密（AES-256-GCM，从环境变量读取密钥）
-- [ ] 2.4 实现 `OpenfangRuntimeBridgeHttpClient.health()`
-- [ ] 2.5 实现 `OpenfangInstanceController`
-- [ ] 2.6 创建前端实例管理页面
-- [ ] 2.7 实现定时健康检查任务（5 分钟间隔）
+- [x] 2.1 创建 `AgentxOpenfangInstanceDO` 和 Mapper
+- [x] 2.2 实现 `OpenfangInstanceService`（CRUD + 连接测试）
+- [x] 2.3 实现密钥加密/解密（AES-256-GCM，从环境变量读取密钥）
+- [x] 2.4 实现 `OpenfangRuntimeBridgeHttpClient.health()`
+- [x] 2.5 实现 `OpenfangInstanceController`
+- [x] 2.6 创建前端实例管理页面
+- [x] 2.7 实现定时健康检查任务（5 分钟间隔）
 - [ ] 2.8 测试：配置实例 → 测试连接 → 看到在线状态
 
 ## 3. 场景配置层（1 天）
 
-- [ ] 3.1 创建 `AgentxScenarioConfigDO` 和 Mapper
-- [ ] 3.2 实现 `ScenarioConfigService`
-- [ ] 3.3 实现 `ScenarioConfigController`
-- [ ] 3.4 创建前端场景配置页面
-- [ ] 3.5 配置请假审批场景（映射到 OpenFang workflow_id）
-- [ ] 3.6 测试：保存场景配置 → 查询配置 → 验证映射关系
+- [x] 3.1 创建 `AgentxScenarioConfigDO` 和 Mapper
+- [x] 3.2 实现 `ScenarioConfigService`
+- [x] 3.3 实现 `ScenarioConfigController`
+- [x] 3.4 创建前端场景配置页面
+- [x] 3.5 配置请假审批场景（映射到 OpenFang workflow_id）
+- [x] 3.6 测试：保存场景配置 → 查询配置 → 验证映射关系
 
 ## 4. 上下文组装层（1.5 天）
 
-- [ ] 4.1 定义 `ContextProvider` 接口（type + provide 方法）
-- [ ] 4.2 实现 `BpmContextProvider`（根据配置查询任意流程待办）
-- [ ] 4.3 实现 `UserContextProvider`（查询用户基本信息）
-- [ ] 4.4 实现 `ApiContextProvider`（调用配置的业务 API）
-- [ ] 4.5 在 `agentx_scenario_config.config` 中配置上下文需求
-- [ ] 4.6 实现 `AgentxContextAssemblyService`（根据场景配置动态组装）
-- [ ] 4.7 测试：配置请假场景 → 组装上下文 → 验证数据正确
+- [x] 4.1 定义 `ContextProvider` 接口（type + provide 方法）
+- [x] 4.2 实现 `BpmContextProvider`（根据配置查询任意流程待办）
+- [x] 4.3 实现 `UserContextProvider`（查询用户基本信息）
+- [x] 4.4 实现 `ApiContextProvider`（调用配置的业务 API）
+- [x] 4.5 在 `agentx_scenario_config.config` 中配置上下文需求
+- [x] 4.6 实现 `AgentxContextAssemblyService`（根据场景配置动态组装）
+- [x] 4.7 测试：配置请假场景 → 组装上下文 → 验证数据正确
 
 ## 5. Tool 注册与调用层（2 天）
 
-- [ ] 5.1 定义 `bpm_query_tasks` Tool 描述符
-- [ ] 5.2 实现 `BpmQueryTasksToolAdapter`
-- [ ] 5.3 定义 `bpm_approve` Tool 描述符
-- [ ] 5.4 实现 `BpmApproveToolAdapter`
-- [ ] 5.5 实现 `AgentxToolGuardService`（权限检查）
-- [ ] 5.6 实现 Tool 调用审计
-- [ ] 5.7 测试：调用 Tool → 验证权限 → 记录审计
+- [x] 5.1 定义 `bpm_query_tasks` Tool 描述符
+- [x] 5.2 实现 `BpmQueryTasksToolAdapter`
+- [x] 5.3 定义 `bpm_approve` Tool 描述符
+- [x] 5.4 实现 `BpmApproveToolAdapter`
+- [x] 5.5 实现 `AgentxToolGuardService`（权限检查）
+- [x] 5.6 实现 Tool 调用审计
+- [x] 5.7 测试：调用 Tool → 验证权限 → 记录审计
 
 ## 6. 任务编排层（2 天）
 
-- [ ] 6.1 实现 `AgentxTaskOrchestrationService.createTask()`（幂等性保证）
-- [ ] 6.2 实现 `OpenfangRuntimeBridge.runWorkflow()`
-- [ ] 6.3 实现 `OpenfangRuntimeBridge.getTaskRun()`（查询 TaskRun 状态）
-- [ ] 6.4 实现任务状态轮询机制（指数退避：2s → 30s）
-- [ ] 6.5 实现 `TaskProjection` 状态同步（映射 OpenFang 状态）
-- [ ] 6.6 实现任务超时检测（24 小时无更新自动失败）
-- [ ] 6.7 创建前端任务列表页面
-- [ ] 6.8 创建前端任务详情页面（显示 trace_events）
-- [ ] 6.9 测试：创建任务 → 调用 OpenFang → 轮询状态 → 更新投影
+- [x] 6.1 实现 `AgentxTaskOrchestrationService.createTask()`（幂等性保证）
+- [x] 6.2 实现 `OpenfangRuntimeBridge.runWorkflow()`
+- [x] 6.3 实现 `OpenfangRuntimeBridge.getTaskRun()`（查询 TaskRun 状态）
+- [x] 6.4 实现任务状态轮询机制（指数退避：2s → 30s）
+- [x] 6.5 实现 `TaskProjection` 状态同步（映射 OpenFang 状态）
+- [x] 6.6 实现任务超时检测（24 小时无更新自动失败）
+- [x] 6.7 创建前端任务列表页面
+- [x] 6.8 创建前端任务详情页面（显示 trace_events）
+- [x] 6.9 测试：创建任务 → 调用 OpenFang → 轮询状态 → 更新投影
 
 ## 7. 审批桥接层（2 天）
 
-- [ ] 7.1 实现 `AgentxApprovalBridgeService.createApprovalBinding()`
-- [ ] 7.2 实现审批详情查询（从 OpenFang 获取）
-- [ ] 7.3 实现 BPM 流程创建（映射审批请求）
-- [ ] 7.4 实现 `OpenfangRuntimeBridge.approveCallback()`（带重试）
-- [ ] 7.5 实现 `OpenfangRuntimeBridge.rejectCallback()`（带重试）
-- [ ] 7.6 实现审批结果回调（指数退避重试 5 次）
-- [ ] 7.7 实现审批超时检测（24 小时自动超时）
-- [ ] 7.8 创建前端审批列表页面
-- [ ] 7.9 测试：触发审批 → 创建 BPM → 审批通过 → 回调 OpenFang
-- [ ] 7.10 测试：回调失败场景 → 重试 → 告警
+- [x] 7.1 实现 `AgentxApprovalBridgeService.createApprovalBinding()`
+- [x] 7.2 实现审批详情查询（从 OpenFang 获取）
+- [x] 7.3 实现 BPM 流程创建（映射审批请求）
+- [x] 7.4 实现 `OpenfangRuntimeBridge.approveCallback()`（带重试）
+- [x] 7.5 实现 `OpenfangRuntimeBridge.rejectCallback()`（带重试）
+- [x] 7.6 实现审批结果回调（指数退避重试 5 次）
+- [x] 7.7 实现审批超时检测（24 小时自动超时）
+- [x] 7.8 创建前端审批列表页面
+- [x] 7.9 测试：触发审批 → 创建 BPM → 审批通过 → 回调 OpenFang
+- [x] 7.10 测试：回调失败场景 → 重试 → 告警
 
 ## 8. 审计层（1 天）
 
-- [ ] 8.1 实现 `AgentxAuditService.logTaskStart()`
-- [ ] 8.2 实现 `AgentxAuditService.logToolCall()`（自动脱敏）
-- [ ] 8.3 实现 `AgentxAuditService.logApprovalRequest()`
-- [ ] 8.4 实现 `AgentxAuditService.logTaskComplete()`
-- [ ] 8.5 实现敏感信息脱敏规则（密码、身份证、手机号、API Key）
-- [ ] 8.6 实现审计日志清理任务（180 天保留期）
-- [ ] 8.7 创建前端审计日志页面
-- [ ] 8.8 测试：执行任务 → 查看审计日志 → 验证完整性和脱敏
+- [x] 8.1 实现 `AgentxAuditService.logTaskStart()`
+- [x] 8.2 实现 `AgentxAuditService.logToolCall()`（自动脱敏）
+- [x] 8.3 实现 `AgentxAuditService.logApprovalRequest()`
+- [x] 8.4 实现 `AgentxAuditService.logTaskComplete()`
+- [x] 8.5 实现敏感信息脱敏规则（密码、身份证、手机号、API Key）
+- [x] 8.6 实现审计日志清理任务（180 天保留期）
+- [x] 8.7 创建前端审计日志页面
+- [x] 8.8 测试：执行任务 → 查看审计日志 → 验证完整性和脱敏
 
 ## 9. OpenFang Workflow 准备（1 天）
 
-- [ ] 9.1 编写 `leave-approval-assistant` workflow 定义
-- [ ] 9.2 在 OpenFang 中注册 workflow
-- [ ] 9.3 配置 `bpm_query_tasks` tool
-- [ ] 9.4 配置 `bpm_approve` tool
-- [ ] 9.5 测试：手动调用 workflow → 验证 tool 可用
+- [x] 9.1 编写 `leave-approval-assistant` workflow 定义
+- [x] 9.2 在 OpenFang 中注册 workflow
+- [x] 9.3 配置 `bpm_query_tasks` tool
+- [x] 9.4 配置 `bpm_approve` tool
+- [x] 9.5 测试：手动调用 workflow → 验证 tool 可用
 
 ## 10. 端到端集成测试（2 天）
 
 - [ ] 10.1 准备测试数据（用户张三、3 条待审批请假）
-- [ ] 10.2 配置 OpenFang 实例
-- [ ] 10.3 配置请假审批场景
-- [ ] 10.4 触发 AI 审批助手
+- [x] 10.2 配置 OpenFang 实例
+- [x] 10.3 配置请假审批场景
+- [x] 10.4 触发 AI 审批助手
 - [ ] 10.5 验证：Agent 查询到 3 条待办
 - [ ] 10.6 验证：1 天和 2 天请假自动通过
 - [ ] 10.7 验证：3 天请假触发审批
