@@ -99,7 +99,7 @@ public class AgentxMetricsService {
 
     public void recordApiResult(int statusCode) {
         apiCallTotal.incrementAndGet();
-        if (statusCode < 500) {
+        if (statusCode >= 200 && statusCode < 400) {
             apiCallSuccess.incrementAndGet();
         }
     }

@@ -65,4 +65,16 @@ public class AgentxConfiguration {
         executor.initialize();
         return executor;
     }
+
+    @Bean(name = "agentxContextExecutor")
+    public ThreadPoolTaskExecutor agentxContextExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setThreadNamePrefix("agentx-ctx-");
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(200);
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.initialize();
+        return executor;
+    }
 }

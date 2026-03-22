@@ -22,6 +22,7 @@ class AgentxContextAssemblyServiceTest {
     @Test
     void shouldAssembleContextByScenarioConfigProviders() {
         AgentxContextAssemblyService service = new AgentxContextAssemblyService();
+        ReflectionTestUtils.setField(service, "contextExecutor", (java.util.concurrent.Executor) Runnable::run);
         ReflectionTestUtils.setField(service, "providers", Arrays.asList(
                 new ContextProvider() {
                     @Override
@@ -64,6 +65,7 @@ class AgentxContextAssemblyServiceTest {
     @Test
     void shouldKeepSeedWhenNoScenarioConfig() {
         AgentxContextAssemblyService service = new AgentxContextAssemblyService();
+        ReflectionTestUtils.setField(service, "contextExecutor", (java.util.concurrent.Executor) Runnable::run);
         ReflectionTestUtils.setField(service, "providers", Collections.emptyList());
         ReflectionTestUtils.setField(service, "scenarioConfigMapper", proxyScenarioMapper(null));
 
@@ -78,6 +80,8 @@ class AgentxContextAssemblyServiceTest {
     @Test
     void shouldFailWhenCriticalProviderTimeout() {
         AgentxContextAssemblyService service = new AgentxContextAssemblyService();
+        java.util.concurrent.ExecutorService executorService = java.util.concurrent.Executors.newSingleThreadExecutor();
+        ReflectionTestUtils.setField(service, "contextExecutor", executorService);
         ReflectionTestUtils.setField(service, "providers", Collections.singletonList(
                 new ContextProvider() {
                     @Override
@@ -99,17 +103,22 @@ class AgentxContextAssemblyServiceTest {
         ReflectionTestUtils.setField(service, "scenarioConfigMapper", proxyScenarioMapper(
                 "{\"contextProviders\":[{\"type\":\"bpm_tasks\"}]}"
         ));
-
-        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:timeout", new HashMap<>())));
-        assertTrue(ex.getMessage().contains("关键 Provider 超时")
-                || ex.getMessage().contains("上下文组装超时")
-                || ex.getMessage().contains("上下文组装失败"));
+        try {
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:timeout", new HashMap<>())));
+            assertTrue(ex.getMessage().contains("关键 Provider 超时")
+                    || ex.getMessage().contains("上下文组装超时")
+                    || ex.getMessage().contains("上下文组装失败"));
+        } finally {
+            executorService.shutdownNow();
+        }
     }
 
     @Test
     void shouldAssembleProvidersInParallel() {
         AgentxContextAssemblyService service = new AgentxContextAssemblyService();
+        java.util.concurrent.ExecutorService executorService = java.util.concurrent.Executors.newFixedThreadPool(4);
+        ReflectionTestUtils.setField(service, "contextExecutor", executorService);
         ReflectionTestUtils.setField(service, "providers", Arrays.asList(
                 slowProvider("bpm_tasks", 600L, Collections.singletonMap("tasks", Collections.singletonList("T-1"))),
                 slowProvider("user_profile", 600L, Collections.singletonMap("name", "李四"))
@@ -117,15 +126,19 @@ class AgentxContextAssemblyServiceTest {
         ReflectionTestUtils.setField(service, "scenarioConfigMapper", proxyScenarioMapper(
                 "{\"contextProviders\":[{\"type\":\"bpm_tasks\"},{\"type\":\"user_profile\"}]}"
         ));
-        long start = System.nanoTime();
-        BusinessContextBundle bundle = service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:parallel",
-                new HashMap<>()));
-        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+        try {
+            long start = System.nanoTime();
+            BusinessContextBundle bundle = service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:parallel",
+                    new HashMap<>()));
+            long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
 
-        assertNotNull(bundle.getContext().get("bpm_tasks"));
-        assertNotNull(bundle.getContext().get("user_profile"));
-        // 并行后总耗时应接近单 provider 耗时，不应接近顺序执行耗时。
-        assertTrue(elapsedMillis < 1000L, "elapsed=" + elapsedMillis);
+            assertNotNull(bundle.getContext().get("bpm_tasks"));
+            assertNotNull(bundle.getContext().get("user_profile"));
+            // 并行后总耗时应接近单 provider 耗时，不应接近顺序执行耗时。
+            assertTrue(elapsedMillis < 1000L, "elapsed=" + elapsedMillis);
+        } finally {
+            executorService.shutdownNow();
+        }
     }
 
     private AgentxScenarioConfigMapper proxyScenarioMapper(String configJson) {

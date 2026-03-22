@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -41,6 +43,9 @@ public class AgentxContextAssemblyService {
     private AgentxScenarioConfigMapper scenarioConfigMapper;
     @Autowired(required = false)
     private AgentxMetricsService metricsService;
+    @Autowired
+    @Qualifier("agentxContextExecutor")
+    private Executor contextExecutor;
 
     private final AgentxContextVisibilityPolicy visibilityPolicy = new AgentxContextVisibilityPolicy();
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -96,7 +101,7 @@ public class AgentxContextAssemblyService {
                         return null;
                     }
                     return invokeProviderWithTimeout(provider, providerConfig, request);
-                }))
+                }, contextExecutor))
                 .collect(Collectors.toList());
         CompletableFuture<Void> future = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
@@ -125,7 +130,8 @@ public class AgentxContextAssemblyService {
                 .setBusinessKey(request.getBusinessKey())
                 .setParams(providerConfig.getParams());
 
-        CompletableFuture<Map<String, Object>> future = CompletableFuture.supplyAsync(() -> provider.provide(providerRequest));
+        CompletableFuture<Map<String, Object>> future = CompletableFuture.supplyAsync(
+                () -> provider.provide(providerRequest), contextExecutor);
         try {
             Map<String, Object> value = future.get(PROVIDER_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             return new ContextContribution()

@@ -54,6 +54,8 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
     private static final int STATUS_DRAFT = 0;
     private static final int STATUS_ACTIVE = 1;
     private static final int STATUS_DISABLED = 2;
+    private static final int OPENFANG_SYNC_MAX_ATTEMPTS = 3;
+    private static final long OPENFANG_SYNC_BASE_BACKOFF_MILLIS = 200L;
 
     @Resource
     private AgentxAgentMapper agentMapper;
@@ -342,17 +344,45 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
             headers.setBearerAuth(apiKey);
         }
         try {
-            ResponseEntity<Object> response = restTemplate.exchange(endpoint, HttpMethod.POST,
-                    new HttpEntity<>(payload, headers), Object.class);
-            if (response.getStatusCode().is2xxSuccessful()) {
-                metricsService.recordOpenfangCall(true);
-                return SyncResult.success("OpenFang 同步成功");
+            for (int attempt = 1; attempt <= OPENFANG_SYNC_MAX_ATTEMPTS; attempt++) {
+                try {
+                    ResponseEntity<Object> response = restTemplate.exchange(endpoint, HttpMethod.POST,
+                            new HttpEntity<>(payload, headers), Object.class);
+                    if (response.getStatusCode().is2xxSuccessful()) {
+                        metricsService.recordOpenfangCall(true);
+                        return SyncResult.success("OpenFang 同步成功");
+                    }
+                    if (shouldRetry(response.getStatusCodeValue(), attempt)) {
+                        backoff(attempt);
+                        continue;
+                    }
+                    metricsService.recordOpenfangCall(false);
+                    return SyncResult.failed("OpenFang 同步失败，HTTP=" + response.getStatusCodeValue());
+                } catch (Exception ex) {
+                    if (attempt >= OPENFANG_SYNC_MAX_ATTEMPTS) {
+                        throw ex;
+                    }
+                    backoff(attempt);
+                }
             }
             metricsService.recordOpenfangCall(false);
-            return SyncResult.failed("OpenFang 同步失败，HTTP=" + response.getStatusCodeValue());
+            return SyncResult.failed("OpenFang 同步失败，超过最大重试次数");
         } catch (Exception ex) {
             metricsService.recordOpenfangCall(false);
             return SyncResult.failed("OpenFang 同步异常：" + ex.getMessage());
+        }
+    }
+
+    private boolean shouldRetry(int statusCode, int attempt) {
+        return attempt < OPENFANG_SYNC_MAX_ATTEMPTS && statusCode >= 500;
+    }
+
+    private void backoff(int attempt) {
+        long waitMillis = OPENFANG_SYNC_BASE_BACKOFF_MILLIS * (1L << Math.max(0, attempt - 1));
+        try {
+            Thread.sleep(waitMillis);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
         }
     }
 
