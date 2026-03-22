@@ -85,6 +85,14 @@ public class AdminUserDO extends TenantBaseDO {
      */
     private Integer status;
     /**
+     * 用户类型：human=真实员工, agent=数字员工
+     */
+    private String userType;
+    /**
+     * 关联 Agent ID（仅数字员工）
+     */
+    private Long agentId;
+    /**
      * 最后登录IP
      */
     private String loginIp;

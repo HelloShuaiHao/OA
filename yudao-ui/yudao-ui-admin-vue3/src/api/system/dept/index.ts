@@ -12,6 +12,16 @@ export interface DeptVO {
   createTime: Date
 }
 
+export interface DeptMemberVO {
+  id: number
+  username: string
+  nickname: string
+  userType: 'human' | 'agent'
+  agentId?: number
+  avatar?: string
+  status: number
+}
+
 // 查询部门（精简)列表
 export const getSimpleDeptList = (): Promise<DeptVO[]> => {
   return request.get({ url: '/system/dept/simple-list' })
@@ -50,4 +60,9 @@ export const deleteDept = async (id: number) => {
 // 批量删除部门
 export const deleteDeptList = async (ids: number[]) => {
   return await request.delete({ url: '/system/dept/delete-list', params: { ids: ids.join(',') } })
+}
+
+// 查询部门成员（支持数字员工）
+export const getDeptMembers = async (deptId: number, userType: 'human' | 'agent' | 'all' = 'all') => {
+  return await request.get<DeptMemberVO[]>({ url: `/system/dept/${deptId}/members`, params: { userType } })
 }

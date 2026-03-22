@@ -112,6 +112,14 @@ public class UserController {
                 pageResult.getTotal()));
     }
 
+    @GetMapping("/agents")
+    @Operation(summary = "获得数字员工分页列表")
+    @PreAuthorize("@ss.hasPermission('system:user:query')")
+    public CommonResult<PageResult<UserRespVO>> getAgentUserPage(@Valid UserPageReqVO pageReqVO) {
+        pageReqVO.setUserType("agent");
+        return getUserPage(pageReqVO);
+    }
+
     @GetMapping({"/list-all-simple", "/simple-list"})
     @Operation(summary = "获取用户精简信息列表", description = "只包含被开启的用户，主要用于前端的下拉选项")
     public CommonResult<List<UserSimpleRespVO>> getSimpleUserList() {

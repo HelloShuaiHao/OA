@@ -30,6 +30,8 @@ public interface AdminUserMapper extends BaseMapperX<AdminUserDO> {
                 .likeIfPresent(AdminUserDO::getUsername, reqVO.getUsername())
                 .likeIfPresent(AdminUserDO::getMobile, reqVO.getMobile())
                 .eqIfPresent(AdminUserDO::getStatus, reqVO.getStatus())
+                .eqIfPresent(AdminUserDO::getUserType, reqVO.getUserType())
+                .eqIfPresent(AdminUserDO::getAgentId, reqVO.getAgentId())
                 .betweenIfPresent(AdminUserDO::getCreateTime, reqVO.getCreateTime())
                 .inIfPresent(AdminUserDO::getDeptId, deptIds)
                 .inIfPresent(AdminUserDO::getId, userIds)
@@ -46,6 +48,13 @@ public interface AdminUserMapper extends BaseMapperX<AdminUserDO> {
 
     default List<AdminUserDO> selectListByDeptIds(Collection<Long> deptIds) {
         return selectList(AdminUserDO::getDeptId, deptIds);
+    }
+
+    default List<AdminUserDO> selectListByDeptIdAndUserType(Long deptId, String userType) {
+        return selectList(new LambdaQueryWrapperX<AdminUserDO>()
+                .eqIfPresent(AdminUserDO::getDeptId, deptId)
+                .eqIfPresent(AdminUserDO::getUserType, userType)
+                .orderByDesc(AdminUserDO::getId));
     }
 
 }

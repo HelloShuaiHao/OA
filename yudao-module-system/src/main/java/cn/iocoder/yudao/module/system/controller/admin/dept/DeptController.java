@@ -7,8 +7,11 @@ import cn.iocoder.yudao.module.system.controller.admin.dept.vo.dept.DeptListReqV
 import cn.iocoder.yudao.module.system.controller.admin.dept.vo.dept.DeptRespVO;
 import cn.iocoder.yudao.module.system.controller.admin.dept.vo.dept.DeptSaveReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.dept.vo.dept.DeptSimpleRespVO;
+import cn.iocoder.yudao.module.system.controller.admin.dept.vo.member.DeptMemberRespVO;
 import cn.iocoder.yudao.module.system.dal.dataobject.dept.DeptDO;
+import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.service.dept.DeptService;
+import cn.iocoder.yudao.module.system.service.user.AdminUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,6 +33,8 @@ public class DeptController {
 
     @Resource
     private DeptService deptService;
+    @Resource
+    private AdminUserService adminUserService;
 
     @PostMapping("create")
     @Operation(summary = "创建部门")
@@ -88,6 +93,16 @@ public class DeptController {
     public CommonResult<DeptRespVO> getDept(@RequestParam("id") Long id) {
         DeptDO dept = deptService.getDept(id);
         return success(BeanUtils.toBean(dept, DeptRespVO.class));
+    }
+
+    @GetMapping("/{id}/members")
+    @Operation(summary = "获得部门成员（支持数字员工）")
+    @PreAuthorize("@ss.hasPermission('system:dept:query')")
+    public CommonResult<List<DeptMemberRespVO>> getDeptMembers(@PathVariable("id") Long id,
+                                                               @RequestParam(value = "userType", required = false) String userType) {
+        String filterType = "all".equalsIgnoreCase(userType) ? null : userType;
+        List<AdminUserDO> users = adminUserService.getUserListByDeptAndType(id, filterType);
+        return success(BeanUtils.toBean(users, DeptMemberRespVO.class));
     }
 
 }

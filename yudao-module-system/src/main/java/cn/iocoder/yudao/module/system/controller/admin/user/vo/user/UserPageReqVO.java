@@ -38,4 +38,10 @@ public class UserPageReqVO extends PageParam {
     @Schema(description = "角色编号", example = "1024")
     private Long roleId;
 
+    @Schema(description = "用户类型（human/agent）", example = "agent")
+    private String userType;
+
+    @Schema(description = "关联 Agent ID", example = "1024")
+    private Long agentId;
+
 }

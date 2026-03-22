@@ -12,6 +12,7 @@ import cn.iocoder.yudao.framework.common.util.collection.CollectionUtils;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
 import cn.iocoder.yudao.framework.common.util.validation.ValidationUtils;
 import cn.iocoder.yudao.framework.datapermission.core.util.DataPermissionUtils;
+import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
 import cn.iocoder.yudao.module.infra.api.config.ConfigApi;
 import cn.iocoder.yudao.module.system.controller.admin.auth.vo.AuthRegisterReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.profile.UserProfileUpdatePasswordReqVO;
@@ -60,6 +61,9 @@ import static cn.iocoder.yudao.module.system.enums.LogRecordConstants.*;
 @Slf4j
 public class AdminUserServiceImpl implements AdminUserService {
 
+    private static final String USER_TYPE_HUMAN = "human";
+    private static final String USER_TYPE_AGENT = "agent";
+
     static final String USER_INIT_PASSWORD_KEY = "system.user.init-password";
 
     static final String USER_REGISTER_ENABLED_KEY = "system.user.register-enabled";
@@ -106,6 +110,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         // 2.1 插入用户
         AdminUserDO user = BeanUtils.toBean(createReqVO, AdminUserDO.class);
         user.setStatus(CommonStatusEnum.ENABLE.getStatus()); // 默认开启
+        user.setUserType(USER_TYPE_HUMAN);
         user.setPassword(encodePassword(createReqVO.getPassword())); // 加密密码
         userMapper.insert(user);
         // 2.2 插入关联岗位
@@ -138,6 +143,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         // 2. 插入用户
         AdminUserDO user = BeanUtils.toBean(registerReqVO, AdminUserDO.class);
         user.setStatus(CommonStatusEnum.ENABLE.getStatus()); // 默认开启
+        user.setUserType(USER_TYPE_HUMAN);
         user.setPassword(encodePassword(registerReqVO.getPassword())); // 加密密码
         userMapper.insert(user);
         return user.getId();
@@ -308,6 +314,11 @@ public class AdminUserServiceImpl implements AdminUserService {
             return Collections.emptyList();
         }
         return userMapper.selectListByDeptIds(deptIds);
+    }
+
+    @Override
+    public List<AdminUserDO> getUserListByDeptAndType(Long deptId, String userType) {
+        return userMapper.selectListByDeptIdAndUserType(deptId, userType);
     }
 
     @Override
@@ -537,6 +548,38 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     public boolean isPasswordMatch(String rawPassword, String encodedPassword) {
         return passwordEncoder.matches(rawPassword, encodedPassword);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void createOrUpdateAgentUser(Long agentId, String username, String nickname, Long deptId, String avatar, Integer status) {
+        List<AdminUserDO> users = userMapper.selectList(new LambdaQueryWrapperX<AdminUserDO>()
+                .eq(AdminUserDO::getAgentId, agentId)
+                .last("LIMIT 1"));
+        AdminUserDO existing = CollUtil.isEmpty(users) ? null : users.get(0);
+        if (existing == null) {
+            AdminUserDO user = new AdminUserDO();
+            user.setUsername(username);
+            user.setNickname(nickname);
+            user.setDeptId(deptId);
+            user.setAvatar(avatar);
+            user.setStatus(status == null ? CommonStatusEnum.ENABLE.getStatus() : status);
+            user.setUserType(USER_TYPE_AGENT);
+            user.setAgentId(agentId);
+            user.setPassword(encodePassword(UUID.randomUUID().toString()));
+            userMapper.insert(user);
+            return;
+        }
+        AdminUserDO update = new AdminUserDO();
+        update.setId(existing.getId());
+        update.setUsername(username);
+        update.setNickname(nickname);
+        update.setDeptId(deptId);
+        update.setAvatar(avatar);
+        update.setStatus(status == null ? existing.getStatus() : status);
+        update.setUserType(USER_TYPE_AGENT);
+        update.setAgentId(agentId);
+        userMapper.updateById(update);
     }
 
     /**

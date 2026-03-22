@@ -11,6 +11,7 @@ import cn.iocoder.yudao.module.system.controller.admin.user.vo.user.UserImportRe
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.user.UserPageReqVO;
 import cn.iocoder.yudao.module.system.controller.admin.user.vo.user.UserSaveReqVO;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
+
 import javax.validation.Valid;
 
 import java.util.Collection;
@@ -143,6 +144,15 @@ public interface AdminUserService {
     List<AdminUserDO> getUserListByDeptIds(Collection<Long> deptIds);
 
     /**
+     * 获得指定部门、指定用户类型的用户列表
+     *
+     * @param deptId 部门 ID
+     * @param userType 用户类型（human/agent），为空时不筛选
+     * @return 用户列表
+     */
+    List<AdminUserDO> getUserListByDeptAndType(Long deptId, String userType);
+
+    /**
      * 获得指定岗位的用户数组
      *
      * @param postIds 岗位数组
@@ -213,5 +223,17 @@ public interface AdminUserService {
      * @return 是否匹配
      */
     boolean isPasswordMatch(String rawPassword, String encodedPassword);
+
+    /**
+     * 创建或更新数字员工映射用户
+     *
+     * @param agentId Agent ID
+     * @param username 用户名
+     * @param nickname 昵称
+     * @param deptId 部门
+     * @param avatar 头像
+     * @param status 状态（0正常 1停用）
+     */
+    void createOrUpdateAgentUser(Long agentId, String username, String nickname, Long deptId, String avatar, Integer status);
 
 }

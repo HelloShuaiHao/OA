@@ -1,0 +1,61 @@
+CREATE TABLE IF NOT EXISTS `agentx_agent` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `tenant_id` BIGINT NOT NULL DEFAULT 0,
+    `agent_name` VARCHAR(64) NOT NULL,
+    `agent_key` VARCHAR(64) NOT NULL,
+    `description` VARCHAR(512) NOT NULL,
+    `avatar_url` VARCHAR(255) DEFAULT NULL,
+    `dept_id` BIGINT NOT NULL,
+    `dept_name` VARCHAR(128) DEFAULT NULL,
+    `template_type` VARCHAR(64) DEFAULT NULL,
+    `status` TINYINT NOT NULL DEFAULT 0,
+    `creator` VARCHAR(64) DEFAULT '',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updater` VARCHAR(64) DEFAULT '',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted` BIT(1) NOT NULL DEFAULT b'0',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tenant_agent_name` (`tenant_id`, `agent_name`, `deleted`),
+    UNIQUE KEY `uk_tenant_agent_key` (`tenant_id`, `agent_key`, `deleted`),
+    KEY `idx_tenant_status` (`tenant_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AgentX 数字员工';
+
+CREATE TABLE IF NOT EXISTS `agentx_agent_process` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `tenant_id` BIGINT NOT NULL DEFAULT 0,
+    `agent_id` BIGINT NOT NULL,
+    `process_definition_id` VARCHAR(128) NOT NULL,
+    `process_definition_key` VARCHAR(128) DEFAULT NULL,
+    `process_name` VARCHAR(128) DEFAULT NULL,
+    `process_version` INT DEFAULT NULL,
+    `selection_mode` VARCHAR(16) NOT NULL DEFAULT 'rule',
+    `selection_rules` TEXT,
+    `priority` INT NOT NULL DEFAULT 0,
+    `creator` VARCHAR(64) DEFAULT '',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updater` VARCHAR(64) DEFAULT '',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted` BIT(1) NOT NULL DEFAULT b'0',
+    PRIMARY KEY (`id`),
+    KEY `idx_tenant_agent` (`tenant_id`, `agent_id`),
+    KEY `idx_process_definition_id` (`process_definition_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AgentX 员工流程关联';
+
+CREATE TABLE IF NOT EXISTS `agentx_agent_capability` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT,
+    `tenant_id` BIGINT NOT NULL DEFAULT 0,
+    `agent_id` BIGINT NOT NULL,
+    `capability_key` VARCHAR(64) NOT NULL,
+    `capability_name` VARCHAR(128) NOT NULL,
+    `enabled` BIT(1) NOT NULL DEFAULT b'1',
+    `max_calls_per_hour` INT DEFAULT NULL,
+    `conditions` TEXT,
+    `creator` VARCHAR(64) DEFAULT '',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updater` VARCHAR(64) DEFAULT '',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted` BIT(1) NOT NULL DEFAULT b'0',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_tenant_agent_capability` (`tenant_id`, `agent_id`, `capability_key`, `deleted`),
+    KEY `idx_tenant_agent` (`tenant_id`, `agent_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AgentX 员工能力配置';
