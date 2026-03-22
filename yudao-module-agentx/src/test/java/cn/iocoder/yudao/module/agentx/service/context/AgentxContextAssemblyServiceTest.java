@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -71,6 +72,37 @@ class AgentxContextAssemblyServiceTest {
 
         assertEquals("L-1", bundle.getContext().get("leave.form"));
         assertNotNull(bundle.getSnapshot());
+    }
+
+    @Test
+    void shouldFailWhenCriticalProviderTimeout() {
+        AgentxContextAssemblyService service = new AgentxContextAssemblyService();
+        ReflectionTestUtils.setField(service, "providers", Collections.singletonList(
+                new ContextProvider() {
+                    @Override
+                    public String getType() {
+                        return "bpm_tasks";
+                    }
+
+                    @Override
+                    public Map<String, Object> provide(ContextRequest request) {
+                        try {
+                            Thread.sleep(20000L);
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                        }
+                        return Collections.singletonMap("tasks", Collections.emptyList());
+                    }
+                }
+        ));
+        ReflectionTestUtils.setField(service, "scenarioConfigMapper", proxyScenarioMapper(
+                "{\"contextProviders\":[{\"type\":\"bpm_tasks\"}]}"
+        ));
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:timeout", new HashMap<>())));
+        assertTrue(ex.getMessage().contains("关键 Provider 超时")
+                || ex.getMessage().contains("上下文组装失败"));
     }
 
     private AgentxScenarioConfigMapper proxyScenarioMapper(String configJson) {

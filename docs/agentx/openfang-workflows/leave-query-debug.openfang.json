@@ -1,0 +1,15 @@
+{
+  "name": "leave-query-debug",
+  "description": "Debug bpm_query_tasks output",
+  "steps": [
+    {
+      "name": "query-debug",
+      "agent_name": "oa-leave-workflow-runner",
+      "prompt": "你是调试助手。输入是 JSON 字符串：{{input}}。先解析 user_id 与 access_token。然后调用 bpm_query_tasks，参数：user_id、access_token、limit=20、leave_only=false。最后只输出两项：1) tool 原始返回；2) 从返回中统计出的任务数量。不要做其它审批动作。",
+      "mode": "sequential",
+      "timeout_secs": 120,
+      "error_mode": "fail",
+      "output_var": "query_debug_result"
+    }
+  ]
+}

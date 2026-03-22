@@ -605,6 +605,7 @@ public class BpmTaskServiceImpl implements BpmTaskService {
         if (CollUtil.isNotEmpty(reqVO.getVariables())) { // 合并前端传递的流程变量，以前端为准
             processVariables.putAll(reqVO.getVariables());
         }
+        ensureLeaveProcessDefaultVariables(task, processVariables);
 
         // 4. 校验并处理 APPROVE_USER_SELECT 当前审批人，选择下一节点审批人的逻辑
         Map<String, Object> variables = validateAndSetNextAssignees(task.getTaskDefinitionKey(), processVariables,
@@ -860,6 +861,16 @@ public class BpmTaskServiceImpl implements BpmTaskService {
     private void updateTaskStatusAndReason(String id, Integer status, String reason) {
         updateTaskStatus(id, status);
         taskService.setVariableLocal(id, BpmnVariableConstants.TASK_VARIABLE_REASON, reason);
+    }
+
+    private void ensureLeaveProcessDefaultVariables(Task task, Map<String, Object> processVariables) {
+        if (task == null || CollUtil.isEmpty(processVariables)) {
+            return;
+        }
+        if (StrUtil.startWithIgnoreCase(task.getProcessDefinitionId(), "oa_leave:")
+                && !processVariables.containsKey("type")) {
+            processVariables.put("type", 1);
+        }
     }
 
     @Override

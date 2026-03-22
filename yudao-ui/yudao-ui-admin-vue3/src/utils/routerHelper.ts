@@ -141,6 +141,10 @@ export const generateRoute = (routes: AppCustomRouteRecordRaw[]): AppRouteRecord
         const index = route?.component
           ? modulesRoutesKeys.findIndex((ev) => ev.includes(route.component))
           : modulesRoutesKeys.findIndex((ev) => ev.includes(route.path))
+        if (index < 0) {
+          console.warn('[router] skip route with unresolved component', route.path, route.component)
+          continue
+        }
         data.component = modules[modulesRoutesKeys[index]]
       }
       if (route.children) {

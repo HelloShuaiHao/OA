@@ -11,6 +11,7 @@ import cn.iocoder.yudao.module.agentx.service.authorization.AgentxCapability;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowMapping;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowResolver;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Proxy;
@@ -50,7 +51,7 @@ class AgentxTaskOrchestrationServiceTest {
                 new AgentxWorkflowMapping("oa.leave.approval", "openfang-leave", "v1", true)
         ));
 
-        assertEquals("openfang-leave", runtimeRequest.get().getScenarioCode());
+        assertEquals("oa.leave.approval", runtimeRequest.get().getScenarioCode());
         assertEquals("task-run-1", projection.getOpenfangTaskRunId());
         assertEquals("leave:1", inserted.get().getBusinessKey());
         assertEquals("oa.leave.approval", inserted.get().getScenarioCode());
@@ -109,6 +110,48 @@ class AgentxTaskOrchestrationServiceTest {
 
         assertEquals(Long.valueOf(100L), projection.getId());
         assertEquals("task-run-exists", projection.getOpenfangTaskRunId());
+    }
+
+    @Test
+    void shouldReturnExistingProjectionWhenInsertHitsUniqueConstraint() {
+        AgentxTaskProjectionDO existing = new AgentxTaskProjectionDO();
+        existing.setId(101L);
+        existing.setIdempotencyKey("idem-race");
+        existing.setOpenfangTaskRunId("task-run-race");
+
+        AtomicReference<OpenfangWorkflowRunReqDTO> runtimeRequest = new AtomicReference<>();
+        AtomicReference<Integer> selectCount = new AtomicReference<>(0);
+        AgentxTaskProjectionMapper mapper = (AgentxTaskProjectionMapper) Proxy.newProxyInstance(
+                AgentxTaskProjectionMapper.class.getClassLoader(),
+                new Class<?>[] { AgentxTaskProjectionMapper.class },
+                (proxy, method, args) -> {
+                    if ("selectByIdempotencyKey".equals(method.getName())) {
+                        int call = selectCount.get() + 1;
+                        selectCount.set(call);
+                        return call == 1 ? null : existing;
+                    }
+                    if ("insert".equals(method.getName())) {
+                        throw new DuplicateKeyException("uk_idempotency_key");
+                    }
+                    return null;
+                });
+        OpenfangRuntimeBridge runtimeBridge = proxyRuntimeBridge(runtimeRequest);
+        AgentxTaskOrchestrationService service = createService(mapper, runtimeBridge);
+
+        AgentxTaskProjectionDO projection = service.createTask(new AgentxTaskStartRequest()
+                        .setScenarioCode("oa.leave.approval")
+                        .setWorkflowVersion("v1")
+                        .setBusinessKey("leave:race")
+                        .setIdempotencyKey("idem-race")
+                        .setPrincipalType("human")
+                        .setPrincipalId("u-race")
+                        .setCapabilities(EnumSet.of(AgentxCapability.READ_LEAVE))
+                        .setContextBundle(Collections.singletonMap("leave.form", "L-race")),
+                Collections.singletonList(new AgentxWorkflowMapping("oa.leave.approval", "openfang-leave", "v1", true)));
+
+        assertEquals(Long.valueOf(101L), projection.getId());
+        assertEquals("task-run-race", projection.getOpenfangTaskRunId());
+        assertEquals(Integer.valueOf(2), selectCount.get());
     }
 
     @Test

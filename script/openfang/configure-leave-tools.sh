@@ -19,7 +19,7 @@ provider = "${MODEL_PROVIDER}"
 model = "${MODEL_NAME}"
 
 [capabilities]
-tools = ["bpm_query_tasks", "bpm_approve", "web_fetch"]
+tools = ["bpm_query_tasks", "bpm_approve", "wait_for_approval", "web_fetch"]
 memory_read = ["*"]
 memory_write = ["self.*"]
 EOF
@@ -82,11 +82,11 @@ if [[ -n "${OPENFANG_API_KEY:-}" ]]; then
   curl -fsSL -X PUT "${OPENFANG_ENDPOINT}/api/agents/${AGENT_ID}/tools" \
     -H "Authorization: Bearer ${OPENFANG_API_KEY}" \
     -H "Content-Type: application/json" \
-    -d '{"tool_allowlist":["bpm_query_tasks","bpm_approve","web_fetch"],"tool_blocklist":[]}'
+    -d '{"tool_allowlist":["bpm_query_tasks","bpm_approve","wait_for_approval","web_fetch"],"tool_blocklist":[]}'
 else
   curl -fsSL -X PUT "${OPENFANG_ENDPOINT}/api/agents/${AGENT_ID}/tools" \
     -H "Content-Type: application/json" \
-    -d '{"tool_allowlist":["bpm_query_tasks","bpm_approve","web_fetch"],"tool_blocklist":[]}'
+    -d '{"tool_allowlist":["bpm_query_tasks","bpm_approve","wait_for_approval","web_fetch"],"tool_blocklist":[]}'
 fi
 echo
 

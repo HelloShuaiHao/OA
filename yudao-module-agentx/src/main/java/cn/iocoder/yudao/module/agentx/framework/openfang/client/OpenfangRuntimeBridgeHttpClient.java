@@ -185,7 +185,7 @@ public class OpenfangRuntimeBridgeHttpClient implements OpenfangRuntimeBridge {
         try {
             return objectMapper.writeValueAsString(input);
         } catch (Exception ex) {
-            return input.toString();
+            throw new IllegalStateException("Failed to serialize workflow input", ex);
         }
     }
 

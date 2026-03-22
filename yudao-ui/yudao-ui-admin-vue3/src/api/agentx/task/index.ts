@@ -15,6 +15,12 @@ export interface AgentxTaskProjectionVO {
   updateTime?: string
 }
 
+export interface AgentxTaskCreateReqVO {
+  scenarioCode: string
+  businessKey: string
+  idempotencyKey?: string
+}
+
 export interface AgentxTaskRuntimeVO {
   taskRunId: string
   workflowId?: string
@@ -28,6 +34,10 @@ export interface AgentxTaskRuntimeVO {
   workflowProjections?: Record<string, any>[]
   traceEvents?: Record<string, any>[]
   lastError?: string
+}
+
+export const createTask = async (data: AgentxTaskCreateReqVO) => {
+  return await request.post({ url: '/agentx/task/create', data })
 }
 
 export const getTaskPage = async (params: PageParam) => {

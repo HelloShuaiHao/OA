@@ -1,11 +1,11 @@
 {
   "name": "leave-approval-assistant",
-  "description": "OA 请假审批助手（AgentX Phase 1, OpenFang v0.3.3 API）",
+  "description": "OA 请假审批助手（AgentX Phase 1, OpenFang v0.3.3 API，含人工审批 Gate）",
   "steps": [
     {
       "name": "leave-approval",
       "agent_name": "oa-leave-workflow-runner",
-      "prompt": "你是 OA 请假审批助手。严格按以下步骤执行，不要只查询不处理：\\n1) 先调用 bpm_query_tasks，参数至少包含 user_id，建议 limit=20，并设置 leave_only=true。\\n2) 从返回列表中逐条读取任务的 leaveDays（数字）。\\n3) 对每条任务都必须调用 bpm_approve：\\n   - leaveDays <= 2：approved=true，reason 写明“自动审批：请假天数 <= 2”。\\n   - leaveDays > 2：approved=false，reason 写明“请假天数 > 2，触发人工审批流程”。\\n4) 若没有可处理任务，明确输出“无待处理请假任务”。\\n5) 最后输出简要摘要（处理总数、通过数、驳回数、失败数）。\\n输入：{{input}}",
+      "prompt": "你是 OA 请假审批助手。必须严格执行以下强约束，不允许省略：\\n\\n输入约定：{{input}} 是 JSON 字符串，必须先解析出 user_id / access_token。若缺 user_id，立即输出：执行失败：缺少 user_id。\\n\\n1) 调用 bpm_query_tasks 时只允许这 4 个参数：user_id、access_token、limit=20、leave_only=true。\\n   严禁传入 process_key / business_key / task_name / scenario_code。\\n2) 逐条读取 leaveDays。\\n3) 决策规则（强制）：\\n   - leaveDays <= 2：调用 bpm_approve(approved=true, reason=自动审批：请假天数 <= 2)。\\n   - leaveDays > 2：\\n     A. 你必须先调用 wait_for_approval（prompt 中必须包含 task_id 与 leaveDays）；\\n     B. 在 wait_for_approval 返回前，严禁调用该任务的 bpm_approve；\\n     C. wait_for_approval 返回后，再调用 bpm_approve(approved=true, reason=人工审批通过后继续执行（请假天数 > 2）)。\\n4) 如果存在 leaveDays > 2 且你没有调用 wait_for_approval，则本次执行视为失败，你必须明确输出“执行失败：未触发人工审批 Gate”。\\n5) 若没有任务，输出“无待处理请假任务”。最后输出摘要（总数/自动通过/人工通过/失败）。",
       "mode": "sequential",
       "timeout_secs": 120,
       "error_mode": "fail",

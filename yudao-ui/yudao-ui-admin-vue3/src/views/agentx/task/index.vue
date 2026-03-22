@@ -27,6 +27,9 @@
       <el-form-item>
         <el-button @click="handleQuery"><Icon icon="ep:search" class="mr-5px" /> 搜索</el-button>
         <el-button @click="resetQuery"><Icon icon="ep:refresh" class="mr-5px" /> 重置</el-button>
+        <el-button type="primary" plain @click="openCreate" v-hasPermi="['agentx:task:query']">
+          <Icon icon="ep:plus" class="mr-5px" /> 触发任务
+        </el-button>
       </el-form-item>
     </el-form>
   </ContentWrap>
@@ -86,14 +89,42 @@
     <el-divider content-position="left">Workflow Projections</el-divider>
     <pre class="runtime-json">{{ JSON.stringify(runtimeDetail?.workflowProjections || [], null, 2) }}</pre>
   </el-dialog>
+
+  <Dialog v-model="createVisible" title="触发 AgentX 任务" width="640px">
+    <el-form ref="createFormRef" v-loading="createLoading" :model="createForm" :rules="createRules" label-width="120px">
+      <el-form-item label="场景编码" prop="scenarioCode">
+        <el-select v-model="createForm.scenarioCode" filterable clearable placeholder="请选择场景" style="width: 100%">
+          <el-option
+            v-for="item in scenarioOptions"
+            :key="item.scenarioCode"
+            :label="`${item.scenarioName} (${item.scenarioCode})`"
+            :value="item.scenarioCode"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="业务键" prop="businessKey">
+        <el-input v-model="createForm.businessKey" placeholder="例如：leave:20260321:001" />
+      </el-form-item>
+      <el-form-item label="幂等键" prop="idempotencyKey">
+        <el-input v-model="createForm.idempotencyKey" placeholder="可选；留空自动生成" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button :disabled="createLoading" type="primary" @click="submitCreate">确 定</el-button>
+      <el-button @click="createVisible = false">取 消</el-button>
+    </template>
+  </Dialog>
 </template>
 
 <script lang="ts" setup>
 import { dateFormatter } from '@/utils/formatTime'
 import * as AgentxTaskApi from '@/api/agentx/task'
+import * as ScenarioApi from '@/api/agentx/scenario'
 
 defineOptions({ name: 'AgentxTask' })
 
+const { t } = useI18n()
+const message = useMessage()
 const loading = ref(false)
 const total = ref(0)
 const list = ref<AgentxTaskApi.AgentxTaskProjectionVO[]>([])
@@ -149,6 +180,53 @@ const openRuntime = async (row: AgentxTaskApi.AgentxTaskProjectionVO) => {
   if (!row.openfangTaskRunId) return
   runtimeDetail.value = await AgentxTaskApi.getTaskRuntime(row.openfangTaskRunId)
   runtimeVisible.value = true
+}
+
+const createVisible = ref(false)
+const createLoading = ref(false)
+const scenarioOptions = ref<ScenarioApi.ScenarioConfigVO[]>([])
+const createFormRef = ref()
+const createForm = reactive<AgentxTaskApi.AgentxTaskCreateReqVO>({
+  scenarioCode: '',
+  businessKey: '',
+  idempotencyKey: ''
+})
+const createRules = reactive({
+  scenarioCode: [{ required: true, message: '场景编码不能为空', trigger: 'change' }],
+  businessKey: [{ required: true, message: '业务键不能为空', trigger: 'blur' }]
+})
+
+const openCreate = async () => {
+  createForm.scenarioCode = ''
+  createForm.businessKey = ''
+  createForm.idempotencyKey = ''
+  createVisible.value = true
+  const data = await ScenarioApi.getScenarioPage({
+    pageNo: 1,
+    pageSize: 100,
+    enabled: 1
+  } as any)
+  scenarioOptions.value = data.list || []
+}
+
+const submitCreate = async () => {
+  const valid = await createFormRef.value?.validate()
+  if (!valid) {
+    return
+  }
+  createLoading.value = true
+  try {
+    await AgentxTaskApi.createTask({
+      scenarioCode: createForm.scenarioCode,
+      businessKey: createForm.businessKey,
+      idempotencyKey: createForm.idempotencyKey || undefined
+    })
+    message.success(t('common.createSuccess'))
+    createVisible.value = false
+    await getList()
+  } finally {
+    createLoading.value = false
+  }
 }
 
 onMounted(() => {

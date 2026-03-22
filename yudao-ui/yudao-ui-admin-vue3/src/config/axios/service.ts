@@ -18,7 +18,16 @@ import { deleteUserCache } from '@/hooks/web/useCache'
 import { ApiEncrypt } from '@/utils/encrypt'
 
 const tenantEnable = import.meta.env.VITE_APP_TENANT_ENABLE
+const defaultTenantId = import.meta.env.VITE_APP_DEFAULT_TENANT_ID
 const { result_code, base_url, request_timeout } = config
+
+const resolveTenantId = () => {
+  const cachedTenantId = getTenantId()
+  if (cachedTenantId) {
+    return cachedTenantId
+  }
+  return defaultTenantId || ''
+}
 
 // 需要忽略的提示。忽略后，自动 Promise.reject('error')
 const ignoreMsgs = [
@@ -61,7 +70,7 @@ service.interceptors.request.use(
     }
     // 设置租户
     if (tenantEnable && tenantEnable === 'true') {
-      const tenantId = getTenantId()
+      const tenantId = resolveTenantId()
       if (tenantId) config.headers['tenant-id'] = tenantId
       // 只有登录时，才设置 visit-tenant-id 访问租户
       const visitTenantId = getVisitTenantId()
@@ -241,7 +250,7 @@ service.interceptors.response.use(
 )
 
 const refreshToken = async () => {
-  axios.defaults.headers.common['tenant-id'] = getTenantId()
+  axios.defaults.headers.common['tenant-id'] = resolveTenantId()
   return await axios.post(base_url + '/system/auth/refresh-token?refreshToken=' + getRefreshToken())
 }
 const handleAuthorized = () => {

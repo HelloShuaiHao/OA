@@ -79,7 +79,15 @@ router.beforeEach(async (to, from, next) => {
         // 后端过滤菜单
         await permissionStore.generateRoutes()
         permissionStore.getAddRouters.forEach((route) => {
-          router.addRoute(route as unknown as RouteRecordRaw) // 动态添加可访问路由表
+          // 外链菜单不需要注册到 vue-router（否则可能因重复/无效路由定义中断后续动态路由注入）
+          if (route.path === '/external-link') {
+            return
+          }
+          try {
+            router.addRoute(route as unknown as RouteRecordRaw) // 动态添加可访问路由表
+          } catch (error) {
+            console.error('[router] addRoute failed', route?.path, route?.name, error)
+          }
         })
         const redirectPath = from.query.redirect || to.path
         // 修复跳转时不带参数的问题

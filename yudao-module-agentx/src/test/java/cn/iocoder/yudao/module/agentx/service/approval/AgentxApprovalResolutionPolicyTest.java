@@ -20,4 +20,16 @@ class AgentxApprovalResolutionPolicyTest {
         assertEquals(Integer.valueOf(40), resolution.getDecisionStatus());
     }
 
+    @Test
+    void shouldMapRejectedToRejectRuntimeWithoutCompensation() {
+        AgentxApprovalResolutionPolicy policy = new AgentxApprovalResolutionPolicy();
+
+        AgentxApprovalResolution resolution = policy.resolve(AgentxApprovalOutcome.REJECTED);
+
+        assertEquals(AgentxApprovalRuntimeAction.REJECT, resolution.getRuntimeAction());
+        assertEquals(AgentxTaskProjectionStatusEnum.REJECTED.getStatus(), resolution.getProjectionStatus());
+        assertEquals(Integer.valueOf(20), resolution.getDecisionStatus());
+        assertTrue(!resolution.isCompensationRequired());
+    }
+
 }

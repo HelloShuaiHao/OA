@@ -1,6 +1,5 @@
 package cn.iocoder.yudao.module.agentx.framework.openfang.client;
 
-import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.module.agentx.framework.openfang.config.AgentxOpenfangProperties;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangApprovalDetailRespDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangHealthRespDTO;
@@ -28,7 +27,8 @@ class OpenfangRuntimeBridgeHttpClientTest {
         AtomicReference<String> url = new AtomicReference<>();
         AtomicReference<HttpEntity<?>> entityRef = new AtomicReference<>();
         RestTemplate restTemplate = new CapturingRestTemplate(url, entityRef,
-                ResponseEntity.ok(CommonResult.success(new OpenfangWorkflowRunRespDTO().setTaskRunId("task-1"))));
+                ResponseEntity.ok(java.util.Collections.singletonMap("data",
+                        java.util.Collections.singletonMap("taskRunId", "task-1"))));
         AgentxOpenfangProperties properties = new AgentxOpenfangProperties();
         properties.setBaseUrl("http://openfang.test");
         properties.setAccessToken("token-1");
@@ -54,7 +54,8 @@ class OpenfangRuntimeBridgeHttpClientTest {
         AtomicReference<String> url = new AtomicReference<>();
         AtomicReference<HttpMethod> methodRef = new AtomicReference<>();
         RestTemplate restTemplate = new CapturingRestTemplate(url, null,
-                ResponseEntity.ok(CommonResult.success(new OpenfangTaskRespDTO().setTaskRunId("task-1")))) {
+                ResponseEntity.ok(java.util.Collections.singletonMap("data",
+                        java.util.Collections.singletonMap("taskRunId", "task-1")))) {
             @Override
             protected HttpMethod captureMethod(HttpMethod method) {
                 methodRef.set(method);
@@ -71,7 +72,8 @@ class OpenfangRuntimeBridgeHttpClientTest {
         assertEquals("http://openfang.test/api/tasks/task-1", url.get());
 
         RestTemplate approvalTemplate = new CapturingRestTemplate(url, null,
-                ResponseEntity.ok(CommonResult.success(new OpenfangApprovalDetailRespDTO().setApprovalId("approval-1"))));
+                ResponseEntity.ok(java.util.Collections.singletonMap("data",
+                        java.util.Collections.singletonMap("approvalId", "approval-1"))));
         OpenfangRuntimeBridgeHttpClient approvalClient = new OpenfangRuntimeBridgeHttpClient(approvalTemplate, properties);
         OpenfangApprovalDetailRespDTO detail = approvalClient.getApprovalDetail("task-1", "approval-1");
         assertEquals("approval-1", detail.getApprovalId());
@@ -84,7 +86,7 @@ class OpenfangRuntimeBridgeHttpClientTest {
         AtomicReference<HttpEntity<?>> entityRef = new AtomicReference<>();
         AtomicReference<HttpMethod> methodRef = new AtomicReference<>();
         RestTemplate restTemplate = new CapturingRestTemplate(url, entityRef,
-                ResponseEntity.ok(CommonResult.success(null))) {
+                ResponseEntity.ok(java.util.Collections.singletonMap("data", null))) {
             @Override
             protected HttpMethod captureMethod(HttpMethod method) {
                 methodRef.set(method);
@@ -120,6 +122,25 @@ class OpenfangRuntimeBridgeHttpClientTest {
         assertEquals("http://openfang.health/health", url.get());
         assertTrue(Boolean.TRUE.equals(healthRespDTO.getOnline()));
         assertEquals("0.3.0", healthRespDTO.getVersion());
+    }
+
+    @Test
+    void shouldReturnOfflineWhenHealthProbeFails() {
+        RestTemplate restTemplate = new RestTemplate() {
+            @Override
+            public <T> ResponseEntity<T> exchange(String url, HttpMethod method, HttpEntity<?> requestEntity,
+                                                  Class<T> responseType, Object... uriVariables) {
+                throw new RuntimeException("connect timeout");
+            }
+        };
+        AgentxOpenfangProperties properties = new AgentxOpenfangProperties();
+        properties.setBaseUrl("http://openfang.default");
+        OpenfangRuntimeBridgeHttpClient client = new OpenfangRuntimeBridgeHttpClient(restTemplate, properties);
+
+        OpenfangHealthRespDTO healthRespDTO = client.health("http://openfang.offline", "token-x");
+
+        assertTrue(Boolean.FALSE.equals(healthRespDTO.getOnline()));
+        assertEquals("OpenFang 健康检查失败", healthRespDTO.getMessage());
     }
 
     private static class CapturingRestTemplate extends RestTemplate {

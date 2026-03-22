@@ -202,6 +202,7 @@ const socialList = [
   { icon: 'ant-design:github-filled', type: 0 },
   { icon: 'ant-design:alipay-circle-filled', type: 0 }
 ]
+const defaultTenantId = import.meta.env.VITE_APP_DEFAULT_TENANT_ID
 
 // 获取验证码
 const getCode = async () => {
@@ -217,6 +218,15 @@ const getCode = async () => {
 // 获取租户 ID
 const getTenantId = async () => {
   if (loginData.tenantEnable === 'true') {
+    // 已有租户缓存时直接复用，避免每次登录都额外请求一次租户接口
+    if (authUtil.getTenantId()) {
+      return
+    }
+    // 本地开发兜底：优先使用默认租户，避免首次登录卡在租户查询接口
+    if (defaultTenantId) {
+      authUtil.setTenantId(Number(defaultTenantId))
+      return
+    }
     const res = await LoginApi.getTenantIdByName(loginData.loginForm.tenantName)
     authUtil.setTenantId(res)
   }
@@ -248,6 +258,10 @@ const getTenantByWebsite = async () => {
 const loading = ref() // ElLoading.service 返回的实例
 // 登录
 const handleLogin = async (params: any) => {
+  // 防止重复点击导致并发登录请求
+  if (loginLoading.value) {
+    return
+  }
   loginLoading.value = true
   try {
     await getTenantId()
@@ -281,9 +295,11 @@ const handleLogin = async (params: any) => {
     } else {
       await push({ path: redirect.value || permissionStore.addRouters[0].path })
     }
+  } catch (error) {
+    console.error('[login] handleLogin failed', error)
   } finally {
     loginLoading.value = false
-    loading.value.close()
+    loading.value?.close()
   }
 }
 
