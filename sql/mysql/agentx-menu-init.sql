@@ -23,7 +23,17 @@ VALUES
 (8804, '审批绑定', '', 2, 40, 8800, 'approval', 'ep:checked', 'agentx/approval/index', 'AgentxApproval',
  0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
 (8805, '审计日志', '', 2, 50, 8800, 'audit', 'ep:document', 'agentx/audit/index', 'AgentxAudit',
- 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0');
+ 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8806, '数字员工', '', 2, 5, 8800, 'agent', 'ep:user', 'agentx/agent/index', 'AgentxAgentList',
+ 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8807, '渠道配置', '', 2, 60, 8800, 'channel', 'ep:chat-dot-round', 'agentx/channel/index', 'AgentxChannelConfig',
+ 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8808, '绑定管理', '', 2, 61, 8800, 'channel/binding', 'ep:link', 'agentx/channel/binding', 'AgentxChannelBinding',
+ 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(88061, '创建数字员工', '', 2, 1, 8806, 'create', 'ep:plus', 'agentx/agent/create', 'AgentxAgentCreate',
+ 0, b'0', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(88062, '数字员工详情', '', 2, 2, 8806, 'detail', 'ep:view', 'agentx/agent/detail', 'AgentxAgentDetail',
+ 0, b'0', b'1', b'1', '1', NOW(), '1', NOW(), b'0');
 
 -- OpenFang 实例按钮权限
 INSERT IGNORE INTO `system_menu`
@@ -66,5 +76,19 @@ INSERT IGNORE INTO `system_menu`
  `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
 VALUES
 (8850, '审计查询', 'agentx:audit:query', 3, 1, 8805, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0');
+
+-- 数字员工按钮权限
+INSERT IGNORE INTO `system_menu`
+(`id`, `name`, `permission`, `type`, `sort`, `parent_id`, `path`, `icon`, `component`, `component_name`,
+ `status`, `visible`, `keep_alive`, `always_show`, `creator`, `create_time`, `updater`, `update_time`, `deleted`)
+VALUES
+(8860, '员工查询', 'agentx:agent:query', 3, 1, 8806, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8861, '员工创建', 'agentx:agent:create', 3, 2, 8806, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8862, '员工修改', 'agentx:agent:update', 3, 3, 8806, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8863, '员工删除', 'agentx:agent:delete', 3, 4, 8806, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8870, '渠道查询', 'agentx:channel:query', 3, 1, 8807, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8871, '渠道创建', 'agentx:channel:create', 3, 2, 8807, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8872, '渠道修改', 'agentx:channel:update', 3, 3, 8807, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0'),
+(8873, '渠道删除', 'agentx:channel:delete', 3, 4, 8807, '', '', '', NULL, 0, b'1', b'1', b'1', '1', NOW(), '1', NOW(), b'0');
 
 SET FOREIGN_KEY_CHECKS = 1;

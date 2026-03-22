@@ -31,4 +31,19 @@ public interface ErrorCodeConstants {
     ErrorCode SCENARIO_CONFIG_NOT_EXISTS = new ErrorCode(1_024_003_001, "场景配置不存在");
     ErrorCode SCENARIO_CONFIG_CODE_DUPLICATED = new ErrorCode(1_024_003_002, "场景编码已存在");
 
+    ErrorCode AGENT_NOT_EXISTS = new ErrorCode(1_024_004_001, "数字员工不存在");
+    ErrorCode AGENT_NAME_DUPLICATED = new ErrorCode(1_024_004_002, "数字员工名称已存在");
+    ErrorCode AGENT_STATUS_INVALID = new ErrorCode(1_024_004_003, "数字员工状态非法");
+    ErrorCode AGENT_CAPABILITY_REQUIRED = new ErrorCode(1_024_004_004, "激活发布时至少配置一个能力");
+    ErrorCode AGENT_PROCESS_REQUIRED = new ErrorCode(1_024_004_005, "激活发布时至少关联一个流程");
+
+    ErrorCode CHANNEL_CONFIG_NOT_EXISTS = new ErrorCode(1_024_005_001, "渠道配置不存在");
+    ErrorCode CHANNEL_TYPE_INVALID = new ErrorCode(1_024_005_002, "渠道类型非法");
+    ErrorCode CHANNEL_BOT_TOKEN_REQUIRED = new ErrorCode(1_024_005_003, "Bot Token 不能为空");
+    ErrorCode CHANNEL_TEST_CONNECT_FAILED = new ErrorCode(1_024_005_004, "渠道连接测试失败：{}");
+
+    ErrorCode CHANNEL_BIND_TOKEN_INVALID = new ErrorCode(1_024_006_001, "绑定 Token 无效");
+    ErrorCode CHANNEL_BIND_TOKEN_EXPIRED = new ErrorCode(1_024_006_002, "绑定链接已过期，请重新获取");
+    ErrorCode CHANNEL_BIND_ALREADY_EXISTS = new ErrorCode(1_024_006_003, "当前渠道账号已绑定，无需重复操作");
+
 }

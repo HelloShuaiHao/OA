@@ -1,0 +1,230 @@
+<template>
+  <ContentWrap>
+    <el-form ref="queryFormRef" :model="queryParams" inline label-width="76px" class="-mb-15px">
+      <el-form-item label="渠道类型" prop="channelType">
+        <el-select v-model="queryParams.channelType" clearable placeholder="请选择类型" style="width: 160px">
+          <el-option label="Telegram" value="telegram" />
+          <el-option label="企业微信" value="wecom" />
+          <el-option label="钉钉" value="dingtalk" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="名称" prop="channelName">
+        <el-input v-model="queryParams.channelName" clearable placeholder="请输入渠道名称" style="width: 220px" @keyup.enter="handleQuery" />
+      </el-form-item>
+      <el-form-item>
+        <el-button @click="handleQuery"><Icon icon="ep:search" class="mr-5px" />搜索</el-button>
+        <el-button @click="resetQuery"><Icon icon="ep:refresh" class="mr-5px" />重置</el-button>
+        <el-button type="primary" plain @click="openForm()" v-hasPermi="['agentx:channel:create']">
+          <Icon icon="ep:plus" class="mr-5px" />添加渠道
+        </el-button>
+        <el-button type="success" plain @click="router.push('/agentx/channel/binding')">
+          <Icon icon="ep:link" class="mr-5px" />绑定管理
+        </el-button>
+      </el-form-item>
+    </el-form>
+  </ContentWrap>
+
+  <ContentWrap>
+    <el-table v-loading="loading" :data="list">
+      <el-table-column label="编号" prop="id" width="90" align="center" />
+      <el-table-column label="类型" prop="channelType" width="120" />
+      <el-table-column label="名称" prop="channelName" min-width="160" />
+      <el-table-column label="关联 Agent" prop="agentIds" min-width="220">
+        <template #default="scope">{{ (scope.row.agentIds || []).join(', ') || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="访问控制" prop="accessControlType" width="120" />
+      <el-table-column label="状态" prop="status" width="90" align="center">
+        <template #default="scope">
+          <el-tag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? '启用' : '停用' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="创建时间" prop="createTime" width="180" :formatter="dateFormatter" />
+      <el-table-column label="操作" width="220" align="center">
+        <template #default="scope">
+          <el-button link type="primary" @click="openForm(scope.row.id)" v-hasPermi="['agentx:channel:update']">编辑</el-button>
+          <el-button link type="success" @click="testConnection(scope.row)" v-hasPermi="['agentx:channel:update']">测试连接</el-button>
+          <el-button link type="danger" @click="handleDelete(scope.row.id)" v-hasPermi="['agentx:channel:delete']">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+    <Pagination :total="total" v-model:page="queryParams.pageNo" v-model:limit="queryParams.pageSize" @pagination="getList" />
+  </ContentWrap>
+
+  <Dialog v-model="dialogVisible" :title="formData.id ? '编辑渠道' : '新增渠道'" width="680px">
+    <el-form ref="formRef" :model="formData" :rules="formRules" label-width="110px">
+      <el-form-item label="渠道类型" prop="channelType">
+        <el-select v-model="formData.channelType" style="width: 100%">
+          <el-option label="Telegram" value="telegram" />
+          <el-option label="企业微信" value="wecom" />
+          <el-option label="钉钉" value="dingtalk" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="渠道名称" prop="channelName">
+        <el-input v-model="formData.channelName" />
+      </el-form-item>
+      <el-form-item label="Bot Token" prop="botToken">
+        <el-input v-model="formData.botToken" show-password />
+      </el-form-item>
+      <el-form-item label="关联 Agent" prop="agentIds">
+        <el-select v-model="formData.agentIds" multiple filterable clearable style="width: 100%">
+          <el-option v-for="item in agentOptions" :key="item.id" :label="item.agentName" :value="item.id!" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="访问控制" prop="accessControlType">
+        <el-radio-group v-model="formData.accessControlType">
+          <el-radio label="all">所有员工</el-radio>
+          <el-radio label="dept">指定部门</el-radio>
+          <el-radio label="user">指定人员</el-radio>
+        </el-radio-group>
+      </el-form-item>
+      <el-form-item v-if="formData.accessControlType === 'dept'" label="部门" prop="deptIds">
+        <el-select v-model="formData.deptIds" multiple filterable clearable style="width: 100%">
+          <el-option v-for="item in deptOptions" :key="item.id" :label="item.name" :value="item.id" />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="状态" prop="status">
+        <el-switch v-model="statusEnabled" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="dialogVisible = false">取消</el-button>
+      <el-button type="primary" @click="submitForm">保存</el-button>
+    </template>
+  </Dialog>
+</template>
+
+<script lang="ts" setup>
+import { dateFormatter } from '@/utils/formatTime'
+import * as ChannelApi from '@/api/agentx/channel'
+import * as AgentApi from '@/api/agentx/agent'
+import * as DeptApi from '@/api/system/dept'
+
+defineOptions({ name: 'AgentxChannelConfig' })
+
+const router = useRouter()
+const message = useMessage()
+const loading = ref(false)
+const total = ref(0)
+const list = ref<ChannelApi.AgentxChannelConfigVO[]>([])
+const queryFormRef = ref()
+const queryParams = reactive({
+  pageNo: 1,
+  pageSize: 10,
+  channelType: undefined as undefined | string,
+  channelName: ''
+})
+
+const dialogVisible = ref(false)
+const formRef = ref()
+const formData = reactive<ChannelApi.AgentxChannelConfigVO>({
+  channelType: 'telegram',
+  channelName: '',
+  botToken: '',
+  agentIds: [],
+  accessControlType: 'all',
+  deptIds: [],
+  userIds: [],
+  status: 1
+})
+const statusEnabled = computed({
+  get: () => formData.status === 1,
+  set: (val: boolean) => (formData.status = val ? 1 : 0)
+})
+const formRules = reactive({
+  channelType: [{ required: true, message: '请选择渠道类型', trigger: 'change' }],
+  channelName: [{ required: true, message: '请输入渠道名称', trigger: 'blur' }],
+  botToken: [
+    {
+      validator: (_: any, value: string, callback: (error?: Error) => void) => {
+        if (!formData.id && !value) {
+          callback(new Error('请输入 Bot Token'))
+          return
+        }
+        callback()
+      },
+      trigger: 'blur'
+    }
+  ],
+  agentIds: [{ required: true, message: '请至少关联一个 Agent', trigger: 'change' }]
+})
+
+const agentOptions = ref<any[]>([])
+const deptOptions = ref<DeptApi.DeptVO[]>([])
+
+const getList = async () => {
+  loading.value = true
+  try {
+    const data = await ChannelApi.getChannelConfigPage(queryParams as any)
+    list.value = data.list || []
+    total.value = data.total || 0
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleQuery = () => {
+  queryParams.pageNo = 1
+  getList()
+}
+const resetQuery = () => {
+  queryFormRef.value?.resetFields()
+  handleQuery()
+}
+
+const openForm = async (id?: number) => {
+  dialogVisible.value = true
+  formData.id = undefined
+  formData.channelType = 'telegram'
+  formData.channelName = ''
+  formData.botToken = ''
+  formData.agentIds = []
+  formData.accessControlType = 'all'
+  formData.deptIds = []
+  formData.userIds = []
+  formData.status = 1
+  if (id) {
+    const data = await ChannelApi.getChannelConfig(id)
+    Object.assign(formData, data)
+  }
+}
+
+const submitForm = async () => {
+  const valid = await formRef.value?.validate()
+  if (!valid) return
+  if (formData.id) {
+    await ChannelApi.updateChannelConfig(formData)
+    message.success('修改成功')
+  } else {
+    await ChannelApi.createChannelConfig(formData)
+    message.success('新增成功')
+  }
+  dialogVisible.value = false
+  await getList()
+}
+
+const handleDelete = async (id: number) => {
+  await message.delConfirm()
+  await ChannelApi.deleteChannelConfig(id)
+  message.success('删除成功')
+  await getList()
+}
+
+const testConnection = async (row: ChannelApi.AgentxChannelConfigVO) => {
+  const data = await ChannelApi.testChannelConfig({ channelId: row.id, channelType: row.channelType })
+  if (data.success) {
+    message.success(data.message)
+  } else {
+    message.warning(data.message)
+  }
+}
+
+onMounted(async () => {
+  const [agents, depts] = await Promise.all([
+    AgentApi.getAgentPage({ pageNo: 1, pageSize: 200 } as any),
+    DeptApi.getSimpleDeptList()
+  ])
+  agentOptions.value = agents.list || []
+  deptOptions.value = depts || []
+  await getList()
+})
+</script>

@@ -185,6 +185,27 @@ const remainingRouter: AppRouteRecordRaw[] = [
     }
   },
   {
+    path: '/agentx',
+    component: Layout,
+    name: 'AgentxBind',
+    meta: {
+      hidden: true
+    },
+    children: [
+      {
+        path: 'bind',
+        component: () => import('@/views/agentx/channel/bind.vue'),
+        name: 'AgentxChannelBind',
+        meta: {
+          canTo: true,
+          hidden: true,
+          noTagsView: true,
+          title: '渠道绑定确认'
+        }
+      }
+    ]
+  },
+  {
     path: '/sso',
     component: () => import('@/views/Login/Login.vue'),
     name: 'SSOLogin',
