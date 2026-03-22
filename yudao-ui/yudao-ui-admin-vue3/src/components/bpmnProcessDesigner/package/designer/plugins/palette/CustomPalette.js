@@ -177,6 +177,34 @@ F.prototype.getPaletteEntries = function () {
       'bpmn-icon-service',
       translate('Create Service Task')
     ),
+    'create.agentx-ai-decision': createAction(
+      'bpmn:ServiceTask',
+      'activity',
+      'bpmn-icon-service-task',
+      'AgentX · AI 决策节点',
+      { name: 'AgentX AI 决策' }
+    ),
+    'create.agentx-tool-call': createAction(
+      'bpmn:ServiceTask',
+      'activity',
+      'bpmn-icon-service-task',
+      'AgentX · Tool 调用节点',
+      { name: 'AgentX Tool 调用' }
+    ),
+    'create.agentx-data-query': createAction(
+      'bpmn:ServiceTask',
+      'activity',
+      'bpmn-icon-service-task',
+      'AgentX · 数据查询节点',
+      { name: 'AgentX 数据查询' }
+    ),
+    'create.agentx-external-api': createAction(
+      'bpmn:ServiceTask',
+      'activity',
+      'bpmn-icon-service-task',
+      'AgentX · 外部 API 节点',
+      { name: 'AgentX 外部 API' }
+    ),
     'create.data-object': createAction(
       'bpmn:DataObjectReference',
       'data-object',

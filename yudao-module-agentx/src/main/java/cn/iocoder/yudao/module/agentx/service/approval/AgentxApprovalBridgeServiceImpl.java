@@ -7,11 +7,15 @@ import cn.iocoder.yudao.module.agentx.dal.mysql.task.AgentxTaskProjectionMapper;
 import cn.iocoder.yudao.module.agentx.enums.AgentxTaskProjectionStatusEnum;
 import cn.iocoder.yudao.module.agentx.framework.openfang.client.OpenfangRuntimeBridge;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangApprovalDetailRespDTO;
+import cn.iocoder.yudao.module.agentx.service.mq.AgentxEventPublisher;
+import cn.iocoder.yudao.module.agentx.service.mq.AgentxMqEvent;
 import cn.iocoder.yudao.module.bpm.api.task.dto.BpmProcessInstanceCreateReqDTO;
 import cn.iocoder.yudao.module.bpm.service.task.BpmProcessInstanceService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -39,6 +43,8 @@ public class AgentxApprovalBridgeServiceImpl implements AgentxApprovalBridgeServ
     private OpenfangRuntimeBridge runtimeBridge;
     @Resource
     private BpmProcessInstanceService bpmProcessInstanceService;
+    @Autowired(required = false)
+    private AgentxEventPublisher eventPublisher;
 
     @Override
     public AgentxApprovalRequest buildApprovalRequest(AgentxTaskProjectionDO projection, String approvalId) {
@@ -70,6 +76,10 @@ public class AgentxApprovalBridgeServiceImpl implements AgentxApprovalBridgeServ
         binding.setCallbackFailed(false);
         binding.setActionSummary(request.getActionSummary());
         approvalBindingMapper.insert(binding);
+        publishEvent("agentx.event.approval.binding.created", "APPROVAL_BINDING_CREATED",
+                request.getScenarioCode(), request.getBusinessKey(), request.getOpenfangTaskRunId(),
+                buildPayload("approvalId", request.getOpenfangApprovalId(),
+                        "bpmProcessInstanceId", bpmProcessInstanceId));
         return binding;
     }
 
@@ -110,6 +120,11 @@ public class AgentxApprovalBridgeServiceImpl implements AgentxApprovalBridgeServ
                 .setDecisionStatus(toDecisionStatus(decision)));
         taskProjectionMapper.updateById(new AgentxTaskProjectionDO().setId(taskProjectionId)
                 .setProjectionStatus(toProjectionStatus(decision)));
+        publishEvent("agentx.event.approval.decision.sync", "APPROVAL_DECISION_SYNCED",
+                null, null, null,
+                buildPayload("approvalBindingId", approvalBindingId,
+                        "taskProjectionId", taskProjectionId,
+                        "decision", decision.name()));
     }
 
     @Override
@@ -119,7 +134,37 @@ public class AgentxApprovalBridgeServiceImpl implements AgentxApprovalBridgeServ
                 .setDecisionStatus(resolution.getDecisionStatus()));
         taskProjectionMapper.updateById(new AgentxTaskProjectionDO().setId(taskProjectionId)
                 .setProjectionStatus(resolution.getProjectionStatus()));
+        publishEvent("agentx.event.approval.outcome.resolved", "APPROVAL_OUTCOME_RESOLVED",
+                null, null, null,
+                buildPayload("approvalBindingId", approvalBindingId,
+                        "taskProjectionId", taskProjectionId,
+                        "outcome", outcome.name()));
         return resolution;
+    }
+
+    private void publishEvent(String routingKey, String eventType, String scenarioCode, String businessKey,
+                              String taskRunId, Map<String, Object> payload) {
+        if (eventPublisher == null) {
+            return;
+        }
+        eventPublisher.publish(routingKey, new AgentxMqEvent()
+                .setEventType(eventType)
+                .setScenarioCode(scenarioCode)
+                .setBusinessKey(businessKey)
+                .setTaskRunId(taskRunId)
+                .setEventTime(LocalDateTime.now())
+                .setPayload(payload));
+    }
+
+    private Map<String, Object> buildPayload(Object... items) {
+        Map<String, Object> payload = new HashMap<>();
+        if (items == null) {
+            return payload;
+        }
+        for (int i = 0; i + 1 < items.length; i += 2) {
+            payload.put(String.valueOf(items[i]), items[i + 1]);
+        }
+        return payload;
     }
 
     private Integer toDecisionStatus(ApprovalDecision decision) {

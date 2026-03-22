@@ -233,6 +233,22 @@ yudao:
   agentx:
     openfang:
       base-url: http://127.0.0.1:4201
+      protection-enabled: true
+      circuit-failure-threshold: 3
+      circuit-open-seconds: 60
+      fallback-enabled: true
+    mq:
+      enabled: true
+      exchange: agentx.events
+      queue: agentx.events.queue
+      routing-key: agentx.event.#
+      async-publish: true
+      publish-core-pool-size: 2
+      publish-max-pool-size: 4
+      publish-queue-capacity: 200
+      publish-max-retries: 2
+      publish-retry-backoff-millis: 200
+      consumer-max-retries: 2
   pay:
     order-notify-url: https://yutou.mynatapp.cc/admin-api/pay/notify/order # 支付渠道的【支付】回调地址
     refund-notify-url: https://yutou.mynatapp.cc/admin-api/pay/notify/refund # 支付渠道的【退款】回调地址

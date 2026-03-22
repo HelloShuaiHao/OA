@@ -4,10 +4,12 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.module.agentx.dal.dataobject.scenario.AgentxScenarioConfigDO;
 import cn.iocoder.yudao.module.agentx.dal.mysql.scenario.AgentxScenarioConfigMapper;
+import cn.iocoder.yudao.module.agentx.service.metrics.AgentxMetricsService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -37,35 +39,46 @@ public class AgentxContextAssemblyService {
     private List<ContextProvider> providers;
     @Resource
     private AgentxScenarioConfigMapper scenarioConfigMapper;
+    @Autowired(required = false)
+    private AgentxMetricsService metricsService;
 
     private final AgentxContextVisibilityPolicy visibilityPolicy = new AgentxContextVisibilityPolicy();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public BusinessContextBundle assemble(AgentxContextRequest request) {
-        Map<ContextLayer, Map<String, Object>> layers = new LinkedHashMap<>();
-        Map<String, Object> seed = new HashMap<>(request.getSeedContext());
-        layers.put(ContextLayer.REQUIRED, seed);
+        long start = System.nanoTime();
+        boolean success = false;
+        try {
+            Map<ContextLayer, Map<String, Object>> layers = new LinkedHashMap<>();
+            Map<String, Object> seed = new HashMap<>(request.getSeedContext());
+            layers.put(ContextLayer.REQUIRED, seed);
 
-        List<ProviderConfig> providerConfigs = resolveProviderConfigs(request.getScenarioCode());
-        List<ContextContribution> contributions = assembleContributions(request, providerConfigs);
+            List<ProviderConfig> providerConfigs = resolveProviderConfigs(request.getScenarioCode());
+            List<ContextContribution> contributions = assembleContributions(request, providerConfigs);
 
-        contributions.forEach(contribution -> layers
-                .computeIfAbsent(contribution.getLayer(), ignored -> new LinkedHashMap<>())
-                .putAll(contribution.getValues()));
+            contributions.forEach(contribution -> layers
+                    .computeIfAbsent(contribution.getLayer(), ignored -> new LinkedHashMap<>())
+                    .putAll(contribution.getValues()));
 
-        ContextSnapshot snapshot = new ContextSnapshot()
-                .setSnapshotId(UUID.randomUUID().toString())
-                .setScenarioCode(request.getScenarioCode())
-                .setBusinessKey(request.getBusinessKey())
-                .setAssembledBy("agentx")
-                .setAssembledAt("generated")
-                .setRuleVersion("v1")
-                .setSources(contributions.stream().map(ContextContribution::getSource).collect(Collectors.toList()))
-                .setLayers(layers);
-        Map<String, Object> runtimeContext = visibilityPolicy.filterForRuntime(snapshot);
-        return new BusinessContextBundle(request.getScenarioCode(), runtimeContext)
-                .setSnapshot(snapshot)
-                .setSummaryContext(Collections.singletonMap("contextSummary", String.join(",", runtimeContext.keySet())));
+            ContextSnapshot snapshot = new ContextSnapshot()
+                    .setSnapshotId(UUID.randomUUID().toString())
+                    .setScenarioCode(request.getScenarioCode())
+                    .setBusinessKey(request.getBusinessKey())
+                    .setAssembledBy("agentx")
+                    .setAssembledAt("generated")
+                    .setRuleVersion("v1")
+                    .setSources(contributions.stream().map(ContextContribution::getSource).collect(Collectors.toList()))
+                    .setLayers(layers);
+            Map<String, Object> runtimeContext = visibilityPolicy.filterForRuntime(snapshot);
+            success = true;
+            return new BusinessContextBundle(request.getScenarioCode(), runtimeContext)
+                    .setSnapshot(snapshot)
+                    .setSummaryContext(Collections.singletonMap("contextSummary", String.join(",", runtimeContext.keySet())));
+        } finally {
+            if (metricsService != null) {
+                metricsService.recordContextAssembly(System.nanoTime() - start, success);
+            }
+        }
     }
 
     private List<ContextContribution> assembleContributions(AgentxContextRequest request, List<ProviderConfig> providerConfigs) {
@@ -75,21 +88,28 @@ public class AgentxContextAssemblyService {
 
         Map<String, ContextProvider> providerMap = providers.stream()
                 .collect(Collectors.toMap(ContextProvider::getType, item -> item, (a, b) -> a));
-        CompletableFuture<List<ContextContribution>> future = CompletableFuture.supplyAsync(() -> {
-            List<ContextContribution> result = new ArrayList<>();
-            for (ProviderConfig providerConfig : providerConfigs) {
-                ContextProvider provider = providerMap.get(providerConfig.getType());
-                if (provider == null) {
-                    log.warn("[assembleContributions][未找到 ContextProvider type={}]", providerConfig.getType());
-                    continue;
-                }
-                result.add(invokeProviderWithTimeout(provider, providerConfig, request));
-            }
-            return result;
-        });
+        List<CompletableFuture<ContextContribution>> futures = providerConfigs.stream()
+                .map(providerConfig -> CompletableFuture.supplyAsync(() -> {
+                    ContextProvider provider = providerMap.get(providerConfig.getType());
+                    if (provider == null) {
+                        log.warn("[assembleContributions][未找到 ContextProvider type={}]", providerConfig.getType());
+                        return null;
+                    }
+                    return invokeProviderWithTimeout(provider, providerConfig, request);
+                }))
+                .collect(Collectors.toList());
+        CompletableFuture<Void> future = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
         try {
-            return future.get(ASSEMBLY_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            future.get(ASSEMBLY_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            List<ContextContribution> result = new ArrayList<>();
+            for (CompletableFuture<ContextContribution> item : futures) {
+                ContextContribution contribution = item.join();
+                if (contribution != null) {
+                    result.add(contribution);
+                }
+            }
+            return result;
         } catch (TimeoutException ex) {
             throw new IllegalStateException("上下文组装超时", ex);
         } catch (Exception ex) {

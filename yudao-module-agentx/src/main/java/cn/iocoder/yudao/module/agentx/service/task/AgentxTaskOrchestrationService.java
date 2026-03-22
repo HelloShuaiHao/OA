@@ -9,14 +9,19 @@ import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangTaskRespDTO
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunReqDTO;
 import cn.iocoder.yudao.module.agentx.framework.openfang.dto.OpenfangWorkflowRunRespDTO;
 import cn.iocoder.yudao.module.agentx.service.authorization.AgentxCapability;
+import cn.iocoder.yudao.module.agentx.service.mq.AgentxEventPublisher;
+import cn.iocoder.yudao.module.agentx.service.mq.AgentxMqEvent;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowMapping;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowResolution;
 import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowResolver;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.annotation.Resource;
+import java.util.HashMap;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -31,6 +36,8 @@ public class AgentxTaskOrchestrationService {
     private AgentxTaskProjectionMapper taskProjectionMapper;
     @Resource
     private OpenfangRuntimeBridge runtimeBridge;
+    @Autowired(required = false)
+    private AgentxEventPublisher eventPublisher;
 
     public AgentxTaskOrchestrationService(AgentxWorkflowResolver workflowResolver) {
         this.workflowResolver = workflowResolver;
@@ -69,6 +76,10 @@ public class AgentxTaskOrchestrationService {
             }
             throw ex;
         }
+        publishEvent("agentx.event.task.created", "TASK_CREATED", projection.getScenarioCode(),
+                projection.getBusinessKey(), projection.getOpenfangTaskRunId(),
+                buildPayload("projectionId", projection.getId(),
+                        "status", projection.getProjectionStatus()));
         return projection;
     }
 
@@ -79,11 +90,20 @@ public class AgentxTaskOrchestrationService {
     public void refreshProjection(AgentxTaskProjectionDO existing, OpenfangTaskRespDTO task) {
         AgentxTaskProjectionDO update = new AgentxTaskProjectionDO();
         update.setId(existing.getId());
-        update.setProjectionStatus(mapStatus(task.getStatus()));
+        Integer status = mapStatus(task.getStatus());
+        update.setProjectionStatus(status);
         update.setResultSummary(task.getResultSummary());
         update.setFailureSummary(task.getFailureSummary());
         update.setAuditSummary(task.getAuditSummary());
         taskProjectionMapper.updateById(update);
+        if (existing.getProjectionStatus() == null || !existing.getProjectionStatus().equals(status)) {
+            publishEvent("agentx.event.task.status.changed", "TASK_STATUS_CHANGED", existing.getScenarioCode(),
+                    existing.getBusinessKey(), existing.getOpenfangTaskRunId(),
+                    buildPayload("projectionId", existing.getId(),
+                            "fromStatus", existing.getProjectionStatus(),
+                            "toStatus", status,
+                            "runtimeStatus", task.getStatus()));
+        }
     }
 
     public Integer nextPollIntervalSeconds(int attempt) {
@@ -107,7 +127,37 @@ public class AgentxTaskOrchestrationService {
         update.setProjectionStatus(AgentxTaskProjectionStatusEnum.FAILED.getStatus());
         update.setFailureSummary("Task 24 小时无更新，自动失败");
         taskProjectionMapper.updateById(update);
+        publishEvent("agentx.event.task.timeout.failed", "TASK_TIMEOUT_FAILED", projection.getScenarioCode(),
+                projection.getBusinessKey(), projection.getOpenfangTaskRunId(),
+                buildPayload("projectionId", projection.getId(),
+                        "fromStatus", projection.getProjectionStatus(),
+                        "toStatus", AgentxTaskProjectionStatusEnum.FAILED.getStatus()));
         return true;
+    }
+
+    private void publishEvent(String routingKey, String eventType, String scenarioCode, String businessKey,
+                              String taskRunId, Map<String, Object> payload) {
+        if (eventPublisher == null) {
+            return;
+        }
+        eventPublisher.publish(routingKey, new AgentxMqEvent()
+                .setEventType(eventType)
+                .setScenarioCode(scenarioCode)
+                .setBusinessKey(businessKey)
+                .setTaskRunId(taskRunId)
+                .setEventTime(LocalDateTime.now())
+                .setPayload(payload));
+    }
+
+    private Map<String, Object> buildPayload(Object... items) {
+        Map<String, Object> payload = new HashMap<>();
+        if (items == null) {
+            return payload;
+        }
+        for (int i = 0; i + 1 < items.length; i += 2) {
+            payload.put(String.valueOf(items[i]), items[i + 1]);
+        }
+        return payload;
     }
 
     private OpenfangWorkflowRunReqDTO buildRunRequest(AgentxTaskStartRequest request, String workflowId,

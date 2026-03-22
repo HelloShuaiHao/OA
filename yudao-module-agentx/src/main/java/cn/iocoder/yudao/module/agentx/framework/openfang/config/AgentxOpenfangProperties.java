@@ -23,5 +23,21 @@ public class AgentxOpenfangProperties {
      * 审批详情读取模式。
      */
     private AgentxApprovalDetailFetchModeEnum approvalDetailFetchMode = AgentxApprovalDetailFetchModeEnum.EXACT_QUERY;
+    /**
+     * 是否启用熔断保护。
+     */
+    private Boolean protectionEnabled = true;
+    /**
+     * 熔断失败阈值（连续失败次数）。
+     */
+    private Integer circuitFailureThreshold = 3;
+    /**
+     * 熔断打开时长（秒）。
+     */
+    private Integer circuitOpenSeconds = 60;
+    /**
+     * 是否启用降级返回。
+     */
+    private Boolean fallbackEnabled = true;
 
 }
