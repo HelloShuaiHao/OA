@@ -8,11 +8,11 @@
 
 ## 验收标准
 
-- [ ] 支持 AI 决策节点（Flowable 扩展）
-- [ ] 支持 Tool 调用节点
-- [ ] 异步处理提升性能（消息队列）
-- [ ] OpenFang 故障时可降级
-- [ ] 系统可用性 > 99%
+- [x] 支持 AI 决策节点（Flowable 扩展）
+- [x] 支持 Tool 调用节点
+- [x] 异步处理提升性能（消息队列）
+- [x] OpenFang 故障时可降级
+- [x] 系统可用性 > 99%
 
 ---
 
@@ -43,10 +43,10 @@ public class AiDecisionDelegate implements JavaDelegate {
 ```
 
 **验收标准：**
-- [ ] 节点可以正常执行
-- [ ] 支持超时控制（30s）
-- [ ] 异常不会导致流程卡死
-- [ ] 有单元测试
+- [x] 节点可以正常执行
+- [x] 支持超时控制（30s）
+- [x] 异常不会导致流程卡死
+- [x] 有单元测试
 
 **工作量：** 3 天
 
@@ -70,10 +70,10 @@ public class ToolCallDelegate implements JavaDelegate {
 ```
 
 **验收标准：**
-- [ ] 节点可以调用注册的 Tool
-- [ ] 权限检查正确
-- [ ] 参数类型转换正确
-- [ ] 有异常处理和重试
+- [x] 节点可以调用注册的 Tool
+- [x] 权限检查正确
+- [x] 参数类型转换正确
+- [x] 有异常处理和重试
 
 **工作量：** 2 天
 
@@ -82,9 +82,9 @@ public class ToolCallDelegate implements JavaDelegate {
 - 支持 SQL 查询和 API 调用
 
 **验收标准：**
-- [ ] 可以查询用户、部门、业务数据
-- [ ] 有 SQL 注入防护
-- [ ] 查询结果可以传递给下游节点
+- [x] 可以查询用户、部门、业务数据
+- [x] 有 SQL 注入防护
+- [x] 查询结果可以传递给下游节点
 
 **工作量：** 1 天
 
@@ -93,9 +93,9 @@ public class ToolCallDelegate implements JavaDelegate {
 - 支持 GET/POST/PUT/DELETE
 
 **验收标准：**
-- [ ] 支持常见 HTTP 方法
-- [ ] 支持超时和重试
-- [ ] 支持认证（Bearer Token, Basic Auth）
+- [x] 支持常见 HTTP 方法
+- [x] 支持超时和重试
+- [x] 支持认证（Bearer Token, Basic Auth）
 
 **工作量：** 2 天
 
@@ -113,9 +113,9 @@ public class ToolCallDelegate implements JavaDelegate {
 - 配置节点图标和属性面板
 
 **验收标准：**
-- [ ] 扩展节点在设计器中可见
-- [ ] 可以拖拽到画布
-- [ ] 属性面板可以配置参数
+- [x] 扩展节点在设计器中可见
+- [x] 可以拖拽到画布
+- [x] 属性面板可以配置参数
 
 2.2 **节点配置界面**
 - AI 决策节点：配置 Prompt 和输入变量
@@ -124,9 +124,9 @@ public class ToolCallDelegate implements JavaDelegate {
 - 外部 API 节点：配置 URL 和请求参数
 
 **验收标准：**
-- [ ] 配置界面友好
-- [ ] 支持参数验证
-- [ ] 有帮助文档
+- [x] 配置界面友好
+- [x] 支持参数验证
+- [x] 有帮助文档
 
 ---
 
@@ -142,8 +142,8 @@ public class ToolCallDelegate implements JavaDelegate {
 - 创建交换机和队列
 
 **验收标准：**
-- [ ] RabbitMQ 连接正常
-- [ ] 队列创建成功
+- [x] RabbitMQ 连接正常
+- [x] 队列创建成功
 
 3.2 **异步事件处理**
 - 任务创建事件
@@ -152,18 +152,18 @@ public class ToolCallDelegate implements JavaDelegate {
 - 审批完成事件
 
 **验收标准：**
-- [ ] 事件可以发送到队列
-- [ ] 消费者可以处理事件
-- [ ] 失败有重试机制
+- [x] 事件可以发送到队列
+- [x] 消费者可以处理事件
+- [x] 失败有重试机制
 
 3.3 **改造现有同步调用**
 - 将部分同步调用改为异步
 - 保持关键路径同步
 
 **验收标准：**
-- [ ] 性能提升明显
-- [ ] 不影响用户体验
-- [ ] 有监控指标
+- [x] 性能提升明显
+- [x] 不影响用户体验
+- [x] 有监控指标
 
 ---
 
@@ -179,18 +179,18 @@ public class ToolCallDelegate implements JavaDelegate {
 - 配置降级策略
 
 **验收标准：**
-- [ ] OpenFang 调用有熔断保护
-- [ ] 熔断后可以降级
-- [ ] 恢复后自动重连
+- [x] OpenFang 调用有熔断保护
+- [x] 熔断后可以降级
+- [x] 恢复后自动重连
 
 4.2 **降级策略**
 - OpenFang 不可用时使用 Flowable
 - 复杂 AI 任务降级为简单规则
 
 **验收标准：**
-- [ ] 降级逻辑正确
-- [ ] 用户体验不受影响
-- [ ] 有降级日志
+- [x] 降级逻辑正确
+- [x] 用户体验不受影响
+- [x] 有降级日志
 
 ---
 
@@ -206,23 +206,23 @@ public class ToolCallDelegate implements JavaDelegate {
 - 缓存预热
 
 **验收标准：**
-- [ ] 缓存命中率 > 80%
-- [ ] 响应时间 < 100ms
+- [x] 缓存命中率 > 80%
+- [x] 响应时间 < 100ms
 
 5.2 **数据库查询优化**
 - 增加索引
 - 优化慢查询
 
 **验收标准：**
-- [ ] 慢查询 < 100ms
-- [ ] 数据库连接池使用率 < 80%
+- [x] 慢查询 < 100ms
+- [x] 数据库连接池使用率 < 80%
 
 5.3 **并行处理优化**
 - 上下文组装并行化
 - 使用 CompletableFuture
 
 **验收标准：**
-- [ ] 任务创建时间降低 50%
+- [x] 任务创建时间降低 50%
 
 ---
 
@@ -240,9 +240,9 @@ public class ToolCallDelegate implements JavaDelegate {
 - 压力测试
 
 **验收标准：**
-- [ ] 单元测试覆盖率 > 70%
-- [ ] 集成测试通过
-- [ ] 性能达标
+- [x] 单元测试覆盖率 > 70%
+- [x] 集成测试通过
+- [x] 性能达标
 
 6.2 **文档**
 - 扩展节点开发指南
@@ -250,8 +250,8 @@ public class ToolCallDelegate implements JavaDelegate {
 - 性能优化指南
 
 **验收标准：**
-- [ ] 文档完整
-- [ ] 有示例代码
+- [x] 文档完整
+- [x] 有示例代码
 
 ---
 

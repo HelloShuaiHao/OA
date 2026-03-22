@@ -296,15 +296,15 @@
 2. 点击"添加渠道"
 
 **验收条件：**
-- [ ] 支持 3 种渠道类型：Telegram、企业微信、钉钉
+- [x] 支持 3 种渠道类型：Telegram、企业微信、钉钉
 - [ ] Telegram 配置包含：
   - Bot Token（必填，加密存储）
   - 关联的 Agent（多选）
   - 访问控制（单选：所有员工/指定部门/指定人员）
-- [ ] 有"测试连接"按钮
-- [ ] 测试连接成功显示："✓ 连接成功"
-- [ ] 测试连接失败显示具体错误信息
-- [ ] 保存后自动同步到 OpenFang
+- [x] 有"测试连接"按钮
+- [x] 测试连接成功显示："✓ 连接成功"
+- [x] 测试连接失败显示具体错误信息
+- [x] 保存后自动同步到 OpenFang
 
 **测试用例：**
 ```
@@ -336,13 +336,13 @@
 3. Bot 返回绑定链接
 
 **验收条件：**
-- [ ] 绑定链接格式：`https://oa.company.com/agentx/bind?token={jwt}`
-- [ ] Token 包含信息：channel_type, channel_user_id, channel_username
-- [ ] Token 10 分钟有效
-- [ ] 点击链接跳转到 OA 登录页（未登录）
-- [ ] 登录后自动完成绑定
-- [ ] 显示绑定成功页面
-- [ ] 绑定记录永久有效
+- [x] 绑定链接格式：`https://oa.company.com/agentx/bind?token={jwt}`
+- [x] Token 包含信息：channel_type, channel_user_id, channel_username
+- [x] Token 10 分钟有效
+- [x] 点击链接跳转到 OA 登录页（未登录）
+- [x] 登录后自动完成绑定
+- [x] 显示绑定成功页面
+- [x] 绑定记录永久有效
 
 **测试用例：**
 ```
@@ -373,7 +373,7 @@
 #### AC-B3: 角色解析服务
 
 **验收条件：**
-- [ ] 支持 7 种角色类型：
+- [x] 支持 7 种角色类型：
   1. direct_manager（直属上级）
   2. department_head（部门负责人）
   3. department_vp（部门副总）
@@ -381,10 +381,10 @@
   5. finance_approver（财务审批人）
   6. fixed_role（固定角色）
   7. custom_role（自定义角色）
-- [ ] 查询响应时间 < 100ms（有缓存）
-- [ ] 查询响应时间 < 500ms（无缓存）
-- [ ] 缓存有效期 5 分钟
-- [ ] 找不到审批人时返回默认审批人（可配置）
+- [x] 查询响应时间 < 100ms（有缓存）
+- [x] 查询响应时间 < 500ms（无缓存）
+- [x] 缓存有效期 5 分钟
+- [x] 找不到审批人时返回默认审批人（可配置）
 
 **测试用例：**
 ```
@@ -411,8 +411,8 @@
 #### AC-B4: 监控指标
 
 **验收条件：**
-- [ ] Prometheus 可以抓取 `/actuator/prometheus` 端点
-- [ ] 暴露以下指标：
+- [x] Prometheus 可以抓取 `/actuator/prometheus` 端点
+- [x] 暴露以下指标：
   - `agentx_agent_total`（Agent 总数）
   - `agentx_task_total`（任务总数）
   - `agentx_task_success_rate`（任务成功率）
@@ -421,7 +421,7 @@
   - `agentx_api_duration_seconds`（API 响应时间）
   - `agentx_openfang_call_total`（OpenFang 调用次数）
   - `agentx_openfang_call_success_rate`（OpenFang 调用成功率）
-- [ ] Grafana 仪表盘可以正常显示
+- [x] Grafana 仪表盘可以正常显示
 
 **测试用例：**
 ```
@@ -569,4 +569,3 @@
 - 开发完成后，按照验收标准逐项测试
 - 所有条件通过才算验收合格
 - 测试用例可以转化为自动化测试脚本
-
