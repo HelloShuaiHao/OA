@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -102,7 +103,29 @@ class AgentxContextAssemblyServiceTest {
         IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
                 service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:timeout", new HashMap<>())));
         assertTrue(ex.getMessage().contains("关键 Provider 超时")
+                || ex.getMessage().contains("上下文组装超时")
                 || ex.getMessage().contains("上下文组装失败"));
+    }
+
+    @Test
+    void shouldAssembleProvidersInParallel() {
+        AgentxContextAssemblyService service = new AgentxContextAssemblyService();
+        ReflectionTestUtils.setField(service, "providers", Arrays.asList(
+                slowProvider("bpm_tasks", 600L, Collections.singletonMap("tasks", Collections.singletonList("T-1"))),
+                slowProvider("user_profile", 600L, Collections.singletonMap("name", "李四"))
+        ));
+        ReflectionTestUtils.setField(service, "scenarioConfigMapper", proxyScenarioMapper(
+                "{\"contextProviders\":[{\"type\":\"bpm_tasks\"},{\"type\":\"user_profile\"}]}"
+        ));
+        long start = System.nanoTime();
+        BusinessContextBundle bundle = service.assemble(new AgentxContextRequest("oa.leave.approval", "leave:parallel",
+                new HashMap<>()));
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+
+        assertNotNull(bundle.getContext().get("bpm_tasks"));
+        assertNotNull(bundle.getContext().get("user_profile"));
+        // 并行后总耗时应接近单 provider 耗时，不应接近顺序执行耗时。
+        assertTrue(elapsedMillis < 1000L, "elapsed=" + elapsedMillis);
     }
 
     private AgentxScenarioConfigMapper proxyScenarioMapper(String configJson) {
@@ -118,6 +141,25 @@ class AgentxContextAssemblyServiceTest {
                     }
                     return null;
                 });
+    }
+
+    private ContextProvider slowProvider(String type, long sleepMillis, Map<String, Object> value) {
+        return new ContextProvider() {
+            @Override
+            public String getType() {
+                return type;
+            }
+
+            @Override
+            public Map<String, Object> provide(ContextRequest request) {
+                try {
+                    Thread.sleep(sleepMillis);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                return value;
+            }
+        };
     }
 
 }
