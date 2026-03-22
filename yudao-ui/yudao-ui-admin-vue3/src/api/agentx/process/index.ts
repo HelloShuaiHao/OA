@@ -7,6 +7,7 @@ export interface AgentxProcessDefinitionVO {
   category?: string
   categoryName?: string
   version: number
+  deploymentTime?: string
 }
 
 export interface AgentxProcessDefinitionPageReqVO extends PageParam {
@@ -25,4 +26,8 @@ export const getProcessDefinitionPage = async (params: AgentxProcessDefinitionPa
 
 export const getProcessDefinition = async (id: string) => {
   return await request.get({ url: '/agentx/process/definition-get?id=' + id })
+}
+
+export const getFallbackProcessDefinitionList = async () => {
+  return await request.get({ url: '/bpm/process-definition/simple-list' })
 }

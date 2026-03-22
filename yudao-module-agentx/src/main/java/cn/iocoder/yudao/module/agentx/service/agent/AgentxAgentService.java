@@ -22,4 +22,6 @@ public interface AgentxAgentService {
 
     PageResult<AgentxAgentRespVO> getAgentPage(AgentxAgentPageReqVO pageReqVO);
 
+    Boolean checkAgentName(Long id, String agentName);
+
 }

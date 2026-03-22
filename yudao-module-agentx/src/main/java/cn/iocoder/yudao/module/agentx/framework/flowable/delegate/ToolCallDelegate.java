@@ -12,9 +12,9 @@ import cn.iocoder.yudao.module.agentx.service.tool.*;
 import lombok.extern.slf4j.Slf4j;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
 import java.util.*;
 
 /**
@@ -34,7 +34,7 @@ public class ToolCallDelegate implements JavaDelegate {
         BUILTIN_DESCRIPTORS.put(BpmApproveToolDescriptor.TOOL_NAME, BpmApproveToolDescriptor.build());
     }
 
-    @Resource
+    @Autowired(required = false)
     private List<AgentxToolAdapter> toolAdapters = Collections.emptyList();
 
     @Override

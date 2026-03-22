@@ -53,3 +53,9 @@ application-my.yaml
 
 /yudao-ui-app/unpackage/
 **/.DS_Store
+.gstack/
+
+# Playwright generated artifacts
+yudao-ui/yudao-ui-admin-vue3/test-results/
+yudao-ui/yudao-ui-admin-vue3/playwright-report/
+yudao-ui/yudao-ui-admin-vue3/.playwright-artifacts/

@@ -23,7 +23,7 @@
           <el-input v-model="formData.basic.description" type="textarea" :rows="3" />
         </el-form-item>
         <el-form-item label="所属部门" prop="deptId">
-          <el-select v-model="formData.basic.deptId" filterable placeholder="请选择部门" style="width: 320px">
+          <el-select v-model="formData.basic.deptId" placeholder="请选择部门" style="width: 320px">
             <el-option v-for="item in deptOptions" :key="item.id" :label="item.name" :value="item.id" />
           </el-select>
         </el-form-item>
@@ -62,6 +62,9 @@
           :class="{ active: formData.templateType === item.type }"
           @click="selectTemplate(item.type)"
         >
+          <div class="template-icon">
+            <Icon :icon="item.icon" />
+          </div>
           <div class="template-title">{{ item.name }}</div>
           <div class="template-desc">{{ item.description }}</div>
         </div>
@@ -73,15 +76,23 @@
         <div v-for="group in capabilityGroups" :key="group.name" class="capability-group">
           <div class="group-title">{{ group.name }}</div>
           <div class="group-options">
-            <el-checkbox v-for="item in group.items" :key="item.key" :value="item.key">
-              {{ item.name }}
+            <el-checkbox v-for="item in group.items" :key="item.key" :value="item.key" class="capability-option">
+              <div class="capability-option__body">
+                <div class="capability-option__name">{{ item.name }}</div>
+                <div class="capability-option__desc">{{ item.description }}</div>
+                <el-tag size="small" type="info" effect="plain">可启用</el-tag>
+              </div>
             </el-checkbox>
           </div>
         </div>
       </el-checkbox-group>
     </el-card>
 
-    <StepProcess v-else-if="activeStep === 3" v-model="formData.processConfig" />
+    <StepProcess
+      v-else-if="activeStep === 3"
+      :model-value="formData.processConfig"
+      @update:model-value="handleProcessConfigChange"
+    />
 
     <el-card v-else shadow="never">
       <el-descriptions border :column="1" title="配置预览">
@@ -109,7 +120,7 @@
     <div class="footer-actions">
       <el-button @click="goBack">取消</el-button>
       <el-button :disabled="activeStep === 0 || submitLoading" @click="prevStep">上一步</el-button>
-      <el-button v-if="activeStep < 4" type="primary" :disabled="submitLoading" @click="nextStep">下一步</el-button>
+      <el-button v-if="activeStep < 4" type="primary" :disabled="nextStepDisabled" @click="nextStep">下一步</el-button>
       <el-button v-if="activeStep === 4 && isEdit" type="primary" :loading="submitLoading" @click="submitUpdate">
         保存修改
       </el-button>
@@ -138,6 +149,13 @@ interface SelectionRule {
   processDefinitionId: string
 }
 
+interface TemplateOption {
+  type: string
+  name: string
+  description: string
+  icon: string
+}
+
 const message = useMessage()
 const route = useRoute()
 const router = useRouter()
@@ -146,42 +164,48 @@ const submitLoading = ref(false)
 const basicFormRef = ref()
 const deptOptions = ref<DeptApi.DeptVO[]>([])
 const isEdit = computed(() => !!route.query.id)
+const checkingName = ref(false)
 
-const fallbackTemplateOptions = [
-  { type: 'leave', name: '请假审批助手', description: '处理请假流程与审批路由' },
-  { type: 'expense', name: '报销审批助手', description: '处理报销单据与审核' },
-  { type: 'procurement', name: '采购审批助手', description: '处理采购申请与预算校验' },
-  { type: 'crm', name: '客户跟进助手', description: '跟进客户并推动转化流程' },
-  { type: 'analysis', name: '数据分析助手', description: '进行数据查询与分析汇总' },
-  { type: 'doc', name: '文档处理助手', description: '解析、归档与文档流转' },
-  { type: 'custom', name: '自定义', description: '完全自定义能力与流程' }
-]
-const templateOptions = ref(fallbackTemplateOptions)
+const templateMetaMap: Record<string, { name: string; description: string; icon: string }> = {
+  leave: { name: '请假审批助手', description: '处理请假流程与审批路由', icon: 'ep:calendar' },
+  expense: { name: '报销审批助手', description: '处理报销单据与审核', icon: 'ep:wallet' },
+  procurement: { name: '采购审批助手', description: '处理采购申请与预算校验', icon: 'ep:shopping-cart-full' },
+  crm: { name: '客户跟进助手', description: '跟进客户并推动转化流程', icon: 'ep:user-filled' },
+  analysis: { name: '数据分析助手', description: '进行数据查询与分析汇总', icon: 'ep:data-analysis' },
+  doc: { name: '文档处理助手', description: '解析、归档与文档流转', icon: 'ep:document' },
+  custom: { name: '自定义', description: '完全自定义能力与流程', icon: 'ep:setting' }
+}
+
+const fallbackTemplateOptions: TemplateOption[] = Object.entries(templateMetaMap).map(([type, meta]) => ({
+  type,
+  ...meta
+}))
+const templateOptions = ref<TemplateOption[]>(fallbackTemplateOptions)
 
 const capabilityGroups = [
   {
     name: '审批管理',
     items: [
-      { key: 'approve_task', name: '审批任务处理' },
-      { key: 'query_task', name: '待办任务查询' },
-      { key: 'workflow_route', name: '流程路由决策' },
-      { key: 'approval_record', name: '审批记录检索' }
+      { key: 'approve_task', name: '审批任务处理', description: '代办审批、通过驳回与批注处理。' },
+      { key: 'query_task', name: '待办任务查询', description: '查询当前用户或代理人的待办审批任务。' },
+      { key: 'workflow_route', name: '流程路由决策', description: '根据业务条件选择最合适的审批流程。' },
+      { key: 'approval_record', name: '审批记录检索', description: '查看历史审批意见、轨迹和处理结果。' }
     ]
   },
   {
     name: '数据查询',
     items: [
-      { key: 'query_user', name: '组织人员查询' },
-      { key: 'query_form', name: '业务单据查询' },
-      { key: 'query_report', name: '报表数据查询' }
+      { key: 'query_user', name: '组织人员查询', description: '查询部门、岗位和人员基础信息。' },
+      { key: 'query_form', name: '业务单据查询', description: '读取请假、报销、采购等业务单据。' },
+      { key: 'query_report', name: '报表数据查询', description: '查询报表指标并输出汇总结果。' }
     ]
   },
   {
     name: '通知能力',
     items: [
-      { key: 'notify_im', name: 'IM 消息通知' },
-      { key: 'notify_mail', name: '邮件通知' },
-      { key: 'notify_sms', name: '短信通知' }
+      { key: 'notify_im', name: 'IM 消息通知', description: '通过站内信或 IM 推送任务状态提醒。' },
+      { key: 'notify_mail', name: '邮件通知', description: '通过邮件发送审批结果与待办提醒。' },
+      { key: 'notify_sms', name: '短信通知', description: '通过短信触达紧急审批与异常告警。' }
     ]
   }
 ]
@@ -228,7 +252,30 @@ const formData = reactive({
 const basicRules = reactive({
   agentName: [
     { required: true, message: '请输入员工名称', trigger: 'blur' },
-    { min: 2, max: 50, message: '名称长度为 2-50 字符', trigger: 'blur' }
+    { min: 2, max: 50, message: '名称长度为 2-50 字符', trigger: 'blur' },
+    {
+      async validator(_rule, value, callback) {
+        const agentName = value?.trim()
+        if (!agentName || agentName.length < 2 || agentName.length > 50) {
+          callback()
+          return
+        }
+        checkingName.value = true
+        try {
+          const available = await AgentApi.checkAgentName(agentName, isEdit.value ? Number(route.query.id) : undefined)
+          if (!available) {
+            callback(new Error('名称已存在'))
+            return
+          }
+          callback()
+        } catch {
+          callback(new Error('名称校验失败，请稍后重试'))
+        } finally {
+          checkingName.value = false
+        }
+      },
+      trigger: 'blur'
+    }
   ],
   description: [
     { required: true, message: '请输入员工描述', trigger: 'blur' },
@@ -239,6 +286,57 @@ const basicRules = reactive({
 
 const currentDeptName = computed(() => {
   return deptOptions.value.find((item) => item.id === formData.basic.deptId)?.name
+})
+
+const isBasicInfoComplete = computed(() => {
+  return (
+    formData.basic.agentName.trim().length >= 2 &&
+    formData.basic.agentName.trim().length <= 50 &&
+    formData.basic.description.trim().length >= 10 &&
+    formData.basic.description.trim().length <= 500 &&
+    !!formData.basic.deptId
+  )
+})
+
+const isProcessStepComplete = computed(() => {
+  const hasProcesses = formData.processConfig.selectedProcesses.length > 0
+  if (!hasProcesses) {
+    return false
+  }
+  if (formData.processConfig.selectionMode !== 'rule') {
+    return true
+  }
+  if (formData.processConfig.selectedProcesses.length <= 1) {
+    return true
+  }
+  if (formData.processConfig.rules.length === 0) {
+    return false
+  }
+  return formData.processConfig.rules.every(
+    (rule) => !!rule.field && !!rule.operator && !!rule.value && !!rule.processDefinitionId
+  )
+})
+
+const nextStepDisabled = computed(() => {
+  if (submitLoading.value) {
+    return true
+  }
+  if (checkingName.value) {
+    return true
+  }
+  if (activeStep.value === 0) {
+    return !isBasicInfoComplete.value
+  }
+  if (activeStep.value === 1) {
+    return !formData.templateType
+  }
+  if (activeStep.value === 2) {
+    return formData.capabilityKeys.length === 0
+  }
+  if (activeStep.value === 3) {
+    return false
+  }
+  return false
 })
 
 const selectTemplate = (type: string) => {
@@ -255,8 +353,9 @@ const loadTemplateOptions = async () => {
     }
     templateOptions.value = list.map((item) => ({
       type: item.templateType,
-      name: item.templateName,
-      description: item.description
+      name: item.templateName || templateMetaMap[item.templateType]?.name || item.templateType,
+      description: item.description || templateMetaMap[item.templateType]?.description || '使用该模板快速创建数字员工',
+      icon: templateMetaMap[item.templateType]?.icon || templateMetaMap.custom.icon
     }))
     list.forEach((item) => {
       templateCapabilityMap[item.templateType] = item.defaultCapabilities || []
@@ -267,7 +366,7 @@ const loadTemplateOptions = async () => {
 }
 
 const goBack = () => {
-  router.push('/agentx/agent')
+  router.push('/agentx/agent/list')
 }
 
 const prevStep = () => {
@@ -314,6 +413,16 @@ const nextStep = async () => {
   }
 }
 
+const handleProcessConfigChange = (value: {
+  selectedProcesses: AgentxProcessDefinitionVO[]
+  selectionMode: 'rule' | 'auto'
+  rules: SelectionRule[]
+}) => {
+  formData.processConfig.selectedProcesses = value.selectedProcesses || []
+  formData.processConfig.selectionMode = value.selectionMode || 'rule'
+  formData.processConfig.rules = value.rules || []
+}
+
 const buildPayload = (): AgentApi.AgentVO => {
   const capabilityMap = Object.fromEntries(
     capabilityGroups.flatMap((group) => group.items.map((item) => [item.key, item.name]))
@@ -346,7 +455,7 @@ const submitDraft = async () => {
   try {
     await AgentApi.createAgentDraft(buildPayload())
     message.success('草稿保存成功')
-    router.push('/agentx/agent')
+    router.push('/agentx/agent/list')
   } finally {
     submitLoading.value = false
   }
@@ -357,7 +466,7 @@ const submitActivate = async () => {
   try {
     const id = await AgentApi.createAgentPublish(buildPayload())
     message.success('数字员工已激活')
-    router.push(`/agentx/agent/detail?id=${id}`)
+    router.push(`/agentx/agent/detail/${id}`)
   } finally {
     submitLoading.value = false
   }
@@ -368,7 +477,7 @@ const submitUpdate = async () => {
   try {
     await AgentApi.updateAgent(buildPayload())
     message.success('修改成功')
-    router.push(`/agentx/agent/detail?id=${route.query.id}`)
+    router.push(`/agentx/agent/detail/${route.query.id}`)
   } finally {
     submitLoading.value = false
   }
@@ -426,6 +535,19 @@ onMounted(async () => {
   transition: all 0.2s;
 }
 
+.template-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
 .template-card:hover {
   border-color: var(--el-color-primary-light-5);
 }
@@ -455,9 +577,37 @@ onMounted(async () => {
 }
 
 .group-options {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 12px;
-  flex-wrap: wrap;
+}
+
+.capability-option {
+  margin-right: 0;
+  align-items: flex-start;
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.capability-option :deep(.el-checkbox__label) {
+  padding-left: 10px;
+}
+
+.capability-option__body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capability-option__name {
+  font-weight: 600;
+}
+
+.capability-option__desc {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .avatar-section {

@@ -54,4 +54,10 @@ public class AgentxAgentRespVO {
     @Schema(description = "更新时间")
     private LocalDateTime updateTime;
 
+    @Schema(description = "创建人")
+    private String creator;
+
+    @Schema(description = "更新人")
+    private String updater;
+
 }

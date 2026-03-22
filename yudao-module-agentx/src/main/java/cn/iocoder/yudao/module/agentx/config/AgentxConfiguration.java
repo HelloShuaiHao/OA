@@ -4,6 +4,18 @@ import cn.iocoder.yudao.module.agentx.framework.openfang.client.OpenfangRuntimeB
 import cn.iocoder.yudao.module.agentx.framework.openfang.client.OpenfangRuntimeBridgeHttpClient;
 import cn.iocoder.yudao.module.agentx.framework.openfang.client.OpenfangRuntimeBridgeProtected;
 import cn.iocoder.yudao.module.agentx.framework.openfang.config.AgentxOpenfangProperties;
+import cn.iocoder.yudao.module.agentx.service.approval.AgentxApprovalBridgeService;
+import cn.iocoder.yudao.module.agentx.service.audit.AgentxAuditService;
+import cn.iocoder.yudao.module.agentx.service.authorization.AgentxAuthorizationService;
+import cn.iocoder.yudao.module.agentx.service.task.AgentxTaskLifecycleService;
+import cn.iocoder.yudao.module.agentx.service.task.AgentxTaskOrchestrationService;
+import cn.iocoder.yudao.module.agentx.service.tool.AgentxToolAdapter;
+import cn.iocoder.yudao.module.agentx.service.tool.AgentxToolGuardService;
+import cn.iocoder.yudao.module.agentx.service.tool.AgentxToolInvocationService;
+import cn.iocoder.yudao.module.agentx.service.tool.BpmApproveToolAdapter;
+import cn.iocoder.yudao.module.agentx.service.tool.BpmQueryTasksToolAdapter;
+import cn.iocoder.yudao.module.agentx.service.workflow.AgentxWorkflowResolver;
+import cn.iocoder.yudao.module.bpm.service.task.BpmTaskService;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
@@ -12,9 +24,11 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.flowable.engine.TaskService;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
 @Configuration(proxyBeanMethods = false)
@@ -31,6 +45,54 @@ public class AgentxConfiguration {
                                                        AgentxOpenfangProperties properties) {
         OpenfangRuntimeBridge delegate = new OpenfangRuntimeBridgeHttpClient(restTemplate, properties);
         return new OpenfangRuntimeBridgeProtected(delegate, properties);
+    }
+
+    @Bean
+    public AgentxAuthorizationService agentxAuthorizationService() {
+        return new AgentxAuthorizationService();
+    }
+
+    @Bean
+    public AgentxWorkflowResolver agentxWorkflowResolver() {
+        return new AgentxWorkflowResolver();
+    }
+
+    @Bean
+    public AgentxToolGuardService agentxToolGuardService(AgentxAuthorizationService authorizationService,
+                                                         AgentxAuditService auditService) {
+        return new AgentxToolGuardService(authorizationService, auditService);
+    }
+
+    @Bean
+    public AgentxToolInvocationService agentxToolInvocationService(AgentxToolGuardService toolGuardService,
+                                                                   AgentxAuditService auditService,
+                                                                   List<AgentxToolAdapter> adapters) {
+        return new AgentxToolInvocationService(toolGuardService, auditService, adapters);
+    }
+
+    @Bean
+    public BpmQueryTasksToolAdapter bpmQueryTasksToolAdapter(TaskService taskService) {
+        return new BpmQueryTasksToolAdapter(taskService);
+    }
+
+    @Bean
+    public BpmApproveToolAdapter bpmApproveToolAdapter(BpmTaskService bpmTaskService) {
+        return new BpmApproveToolAdapter(bpmTaskService);
+    }
+
+    @Bean
+    public AgentxTaskOrchestrationService agentxTaskOrchestrationService(AgentxWorkflowResolver workflowResolver) {
+        return new AgentxTaskOrchestrationService(workflowResolver);
+    }
+
+    @Bean
+    public AgentxTaskLifecycleService agentxTaskLifecycleService(AgentxTaskOrchestrationService orchestrationService,
+                                                                 AgentxApprovalBridgeService approvalBridgeService,
+                                                                 OpenfangRuntimeBridge runtimeBridge,
+                                                                 AgentxAuditService auditService,
+                                                                 AgentxAuthorizationService authorizationService) {
+        return new AgentxTaskLifecycleService(orchestrationService, approvalBridgeService, runtimeBridge,
+                auditService, authorizationService);
     }
 
     @Bean

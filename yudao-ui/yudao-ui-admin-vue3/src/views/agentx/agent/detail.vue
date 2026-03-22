@@ -1,6 +1,6 @@
 <template>
   <ContentWrap>
-    <el-page-header content="数字员工详情" @back="router.push('/agentx/agent')" />
+    <el-page-header content="数字员工详情" @back="router.push('/agentx/agent/list')" />
   </ContentWrap>
 
   <ContentWrap v-loading="loading">
@@ -11,12 +11,20 @@
       <el-descriptions-item label="模板">{{ detail?.templateType || '-' }}</el-descriptions-item>
       <el-descriptions-item label="员工 Key" :span="2">{{ detail?.agentKey || '-' }}</el-descriptions-item>
       <el-descriptions-item label="描述" :span="2">{{ detail?.description || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="创建时间">{{ formatDate(detail?.createTime) }}</el-descriptions-item>
+      <el-descriptions-item label="最后更新时间">{{ formatDate(detail?.updateTime) }}</el-descriptions-item>
+      <el-descriptions-item label="创建人">{{ detail?.creator || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="更新人">{{ detail?.updater || '-' }}</el-descriptions-item>
     </el-descriptions>
   </ContentWrap>
 
   <ContentWrap>
     <div class="action-bar">
-      <el-button type="primary" @click="router.push(`/agentx/agent/create?id=${route.query.id}`)" v-hasPermi="['agentx:agent:update']">
+      <el-button
+        type="primary"
+        @click="router.push(`/agentx/agent/create?id=${currentAgentId}`)"
+        v-hasPermi="['agentx:agent:update']"
+      >
         编辑
       </el-button>
       <el-button type="primary" plain @click="router.push('/agentx/channel')">渠道配置</el-button>
@@ -96,6 +104,7 @@ const message = useMessage()
 const loading = ref(false)
 const detail = ref<AgentApi.AgentVO>()
 const deptMembers = ref<DeptApi.DeptMemberVO[]>([])
+const currentAgentId = computed(() => Number(route.params.id || route.query.id || 0))
 const selectionRuleRows = computed(() => {
   const processMap = Object.fromEntries(
     (detail.value?.processes || []).map((p) => [p.processDefinitionId, p.processName || p.processDefinitionKey || p.processDefinitionId])
@@ -112,8 +121,12 @@ const statusLabel = (status?: number) => {
   return '草稿'
 }
 
+const formatDate = (value?: string) => {
+  return value ? formatDateTime(value) : '-'
+}
+
 const getDetail = async () => {
-  const id = Number(route.query.id)
+  const id = currentAgentId.value
   if (!id) return
   loading.value = true
   try {
@@ -145,7 +158,7 @@ const handleDelete = async () => {
   await message.delConfirm()
   await AgentApi.deleteAgent(detail.value.id)
   message.success('删除成功')
-  router.push('/agentx/agent')
+  router.push('/agentx/agent/list')
 }
 </script>
 

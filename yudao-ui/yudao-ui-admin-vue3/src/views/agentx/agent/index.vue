@@ -23,12 +23,19 @@
         </el-select>
       </el-form-item>
       <el-form-item label="模板">
-        <el-input v-model="queryParams.templateType" placeholder="例如：leave/custom" clearable style="width: 180px" />
+        <el-select v-model="queryParams.templateType" placeholder="请选择模板" clearable style="width: 180px">
+          <el-option v-for="item in templateOptions" :key="item.value" :label="item.label" :value="item.value" />
+        </el-select>
       </el-form-item>
       <el-form-item>
         <el-button @click="handleQuery"><Icon icon="ep:search" class="mr-5px" /> 搜索</el-button>
         <el-button @click="resetQuery"><Icon icon="ep:refresh" class="mr-5px" /> 重置</el-button>
-        <el-button type="primary" plain @click="router.push('/agentx/agent/create')" v-hasPermi="['agentx:agent:create']">
+        <el-button
+          type="primary"
+          plain
+          @click="router.push('/agentx/agent/create')"
+          v-hasPermi="['agentx:agent:create']"
+        >
           <Icon icon="ep:plus" class="mr-5px" /> 创建数字员工
         </el-button>
       </el-form-item>
@@ -39,7 +46,7 @@
     <el-empty v-if="!loading && list.length === 0" description="暂无数字员工" />
 
     <div v-else class="card-grid" v-loading="loading">
-      <el-card v-for="item in list" :key="item.id" shadow="hover" class="agent-card">
+      <el-card v-for="item in list" :key="item.id" shadow="hover" class="agent-card" @click="openDetail(item.id!)">
         <div class="card-head">
           <el-avatar :size="44" :src="item.avatarUrl">{{ item.agentName.slice(0, 1) }}</el-avatar>
           <div class="head-main">
@@ -56,17 +63,17 @@
         <div class="desc-text">{{ item.description || '-' }}</div>
 
         <div class="card-actions">
-          <el-button link type="primary" @click="openDetail(item.id!)">详情</el-button>
-          <el-button link type="primary" @click="openEdit(item.id!)" v-hasPermi="['agentx:agent:update']">编辑</el-button>
+          <el-button link type="primary" @click.stop="openDetail(item.id!)">详情</el-button>
+          <el-button link type="primary" @click.stop="openEdit(item.id!)" v-hasPermi="['agentx:agent:update']">编辑</el-button>
           <el-button
             link
             type="warning"
-            @click="handleStatus(item)"
+            @click.stop="handleStatus(item)"
             v-hasPermi="['agentx:agent:update']"
           >
             {{ item.status === 1 ? '停用' : '启用' }}
           </el-button>
-          <el-button link type="danger" @click="handleDelete(item.id!)" v-hasPermi="['agentx:agent:delete']">
+          <el-button link type="danger" @click.stop="handleDelete(item.id!)" v-hasPermi="['agentx:agent:delete']">
             删除
           </el-button>
         </div>
@@ -85,6 +92,7 @@
 <script setup lang="ts">
 import * as AgentApi from '@/api/agentx/agent'
 import * as DeptApi from '@/api/system/dept'
+import { useDebounceFn } from '@vueuse/core'
 
 defineOptions({ name: 'AgentxAgentList' })
 
@@ -94,6 +102,15 @@ const loading = ref(false)
 const total = ref(0)
 const list = ref<AgentApi.AgentVO[]>([])
 const deptOptions = ref<DeptApi.DeptVO[]>([])
+const templateOptions = [
+  { label: '请假审批助手', value: 'leave' },
+  { label: '报销审批助手', value: 'expense' },
+  { label: '采购审批助手', value: 'procurement' },
+  { label: '客户跟进助手', value: 'crm' },
+  { label: '数据分析助手', value: 'analysis' },
+  { label: '文档处理助手', value: 'doc' },
+  { label: '自定义', value: 'custom' }
+]
 
 const queryParams = reactive<AgentApi.AgentPageReqVO>({
   pageNo: 1,
@@ -142,7 +159,7 @@ const resetQuery = () => {
 }
 
 const openDetail = (id: number) => {
-  router.push(`/agentx/agent/detail?id=${id}`)
+  router.push(`/agentx/agent/detail/${id}`)
 }
 
 const openEdit = (id: number) => {
@@ -169,6 +186,14 @@ onMounted(() => {
   })
   getList()
 })
+
+watch(
+  () => queryParams.agentName,
+  useDebounceFn(() => {
+    queryParams.pageNo = 1
+    getList()
+  }, 500)
+)
 </script>
 
 <style scoped>
@@ -180,6 +205,7 @@ onMounted(() => {
 
 .agent-card {
   min-height: 180px;
+  cursor: pointer;
 }
 
 .card-head {

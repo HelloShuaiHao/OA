@@ -20,10 +20,10 @@ import cn.iocoder.yudao.module.bpm.service.definition.BpmCategoryService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.flowable.engine.repository.ProcessDefinitionQuery;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,6 +47,7 @@ import static cn.iocoder.yudao.framework.common.util.collection.CollectionUtils.
 @RestController
 @RequestMapping("/agentx/process")
 @Validated
+@Slf4j
 public class AgentxProcessController {
 
     @Resource
@@ -62,43 +63,53 @@ public class AgentxProcessController {
     @Operation(summary = "获得可选流程定义分页（最新版本）")
     @PreAuthorize("@ss.hasPermission('agentx:scenario:query')")
     public CommonResult<PageResult<AgentxProcessDefinitionRespVO>> getDefinitionPage(@Valid AgentxProcessDefinitionPageReqVO pageReqVO) {
-        ProcessDefinitionQuery query = repositoryService.createProcessDefinitionQuery()
-                .processDefinitionTenantId(FlowableUtils.getTenantId())
-                .latestVersion();
-        if (pageReqVO.getActiveOnly() == null || pageReqVO.getActiveOnly()) {
-            query.active();
-        }
-        if (pageReqVO.getName() != null && !pageReqVO.getName().trim().isEmpty()) {
-            query.processDefinitionNameLike("%" + pageReqVO.getName().trim() + "%");
-        }
-        if (pageReqVO.getKey() != null && !pageReqVO.getKey().trim().isEmpty()) {
-            query.processDefinitionKey(pageReqVO.getKey().trim());
-        }
+        try {
+            ProcessDefinitionQuery query = repositoryService.createProcessDefinitionQuery()
+                    .processDefinitionTenantId(FlowableUtils.getTenantId())
+                    .latestVersion();
+            if (pageReqVO.getActiveOnly() == null || pageReqVO.getActiveOnly()) {
+                query.active();
+            }
+            if (pageReqVO.getName() != null && !pageReqVO.getName().trim().isEmpty()) {
+                query.processDefinitionNameLike("%" + pageReqVO.getName().trim() + "%");
+            }
+            if (pageReqVO.getKey() != null && !pageReqVO.getKey().trim().isEmpty()) {
+                query.processDefinitionKey(pageReqVO.getKey().trim());
+            }
 
-        long count = query.count();
-        if (count == 0) {
-            return success(PageResult.empty(count));
+            long count = query.count();
+            if (count == 0) {
+                return success(PageResult.empty(count));
+            }
+
+            List<ProcessDefinition> definitions = query.orderByProcessDefinitionName().asc()
+                    .listPage(PageUtils.getStart(pageReqVO), pageReqVO.getPageSize());
+
+            Map<String, BpmCategoryDO> categoryMap = Collections.emptyMap();
+            if (CollUtil.isNotEmpty(definitions)) {
+                try {
+                    categoryMap = categoryService.getCategoryMap(convertSet(definitions, ProcessDefinition::getCategory));
+                } catch (Exception ex) {
+                    log.warn("[getDefinitionPage][load category map failed]", ex);
+                }
+            }
+
+            List<AgentxProcessDefinitionRespVO> list = convertList(definitions, pd -> {
+                AgentxProcessDefinitionRespVO vo = new AgentxProcessDefinitionRespVO();
+                vo.setId(pd.getId());
+                vo.setKey(pd.getKey());
+                vo.setName(pd.getName());
+                vo.setCategory(pd.getCategory());
+                vo.setVersion(pd.getVersion());
+                BpmCategoryDO category = categoryMap.get(pd.getCategory());
+                vo.setCategoryName(category == null ? null : category.getName());
+                return vo;
+            });
+            return success(new PageResult<>(list, count));
+        } catch (Exception ex) {
+            log.error("[getDefinitionPage][query process definitions failed]", ex);
+            return success(PageResult.empty());
         }
-
-        List<ProcessDefinition> definitions = query.orderByProcessDefinitionName().asc()
-                .listPage(PageUtils.getStart(pageReqVO), pageReqVO.getPageSize());
-
-        Map<String, BpmCategoryDO> categoryMap = CollUtil.isEmpty(definitions)
-                ? Collections.emptyMap()
-                : categoryService.getCategoryMap(convertSet(definitions, ProcessDefinition::getCategory));
-
-        List<AgentxProcessDefinitionRespVO> list = convertList(definitions, pd -> {
-            AgentxProcessDefinitionRespVO vo = new AgentxProcessDefinitionRespVO();
-            vo.setId(pd.getId());
-            vo.setKey(pd.getKey());
-            vo.setName(pd.getName());
-            vo.setCategory(pd.getCategory());
-            vo.setVersion(pd.getVersion());
-            BpmCategoryDO category = categoryMap.get(pd.getCategory());
-            vo.setCategoryName(category == null ? null : category.getName());
-            return vo;
-        });
-        return success(new PageResult<>(list, count));
     }
 
     @GetMapping("/definition-get")
@@ -106,21 +117,24 @@ public class AgentxProcessController {
     @Parameter(name = "id", required = true, description = "流程定义 ID")
     @PreAuthorize("@ss.hasPermission('agentx:scenario:query')")
     public CommonResult<AgentxProcessDefinitionDetailRespVO> getDefinition(@RequestParam("id") String id) {
-        ProcessDefinition pd = repositoryService.getProcessDefinition(id);
-        if (pd == null) {
+        try {
+            ProcessDefinition pd = repositoryService.getProcessDefinition(id);
+            if (pd == null) {
+                return success(null);
+            }
+
+            AgentxProcessDefinitionDetailRespVO vo = new AgentxProcessDefinitionDetailRespVO();
+            vo.setId(pd.getId());
+            vo.setKey(pd.getKey());
+            vo.setName(pd.getName());
+            vo.setCategory(pd.getCategory());
+            vo.setVersion(pd.getVersion());
+            vo.setBpmnXml(BpmnModelUtils.getBpmnXml(repositoryService.getProcessModel(id)));
+            return success(vo);
+        } catch (Exception ex) {
+            log.error("[getDefinition][load process definition failed][id={}]", id, ex);
             return success(null);
         }
-
-        AgentxProcessDefinitionDetailRespVO vo = new AgentxProcessDefinitionDetailRespVO();
-        vo.setId(pd.getId());
-        vo.setKey(pd.getKey());
-        vo.setName(pd.getName());
-        vo.setCategory(pd.getCategory());
-        vo.setVersion(pd.getVersion());
-
-        BpmnModel bpmnModel = repositoryService.getBpmnModel(id);
-        vo.setBpmnXml(bpmnModel == null ? null : BpmnModelUtils.getBpmnXml(bpmnModel));
-        return success(vo);
     }
 
     @PostMapping("/select")

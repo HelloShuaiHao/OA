@@ -84,4 +84,12 @@ public class AgentxAgentController {
         return success(agentService.getAgentPage(pageReqVO));
     }
 
+    @GetMapping("/check-name")
+    @Operation(summary = "校验数字员工名称是否可用")
+    @PreAuthorize("@ss.hasPermission('agentx:agent:query')")
+    public CommonResult<Boolean> checkName(@RequestParam(value = "id", required = false) Long id,
+                                           @RequestParam("agentName") String agentName) {
+        return success(agentService.checkAgentName(id, agentName));
+    }
+
 }

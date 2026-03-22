@@ -57,6 +57,10 @@ export const getAgent = async (id: number) => {
   return await request.get({ url: '/agentx/agent/get?id=' + id })
 }
 
+export const checkAgentName = async (agentName: string, id?: number) => {
+  return await request.get({ url: '/agentx/agent/check-name', params: { agentName, id } })
+}
+
 export const createAgentDraft = async (data: AgentVO) => {
   return await request.post({ url: '/agentx/agent/create-draft', data })
 }

@@ -193,6 +193,50 @@ const remainingRouter: AppRouteRecordRaw[] = [
     },
     children: [
       {
+        path: 'agent',
+        redirect: '/agentx/agent/list',
+        name: 'AgentxAgentRedirectRoute',
+        meta: {
+          canTo: true,
+          hidden: true,
+          noTagsView: true,
+          title: '数字员工'
+        }
+      },
+      {
+        path: 'agent/list',
+        component: () => import('@/views/agentx/agent/index.vue'),
+        name: 'AgentxAgentListRoute',
+        meta: {
+          canTo: true,
+          hidden: true,
+          noTagsView: true,
+          title: '数字员工列表'
+        }
+      },
+      {
+        path: 'agent/create',
+        component: () => import('@/views/agentx/agent/create.vue'),
+        name: 'AgentxAgentCreateRoute',
+        meta: {
+          canTo: true,
+          hidden: true,
+          noTagsView: true,
+          title: '数字员工创建'
+        }
+      },
+      {
+        path: 'agent/detail/:id',
+        component: () => import('@/views/agentx/agent/detail.vue'),
+        name: 'AgentxAgentDetailRoute',
+        meta: {
+          canTo: true,
+          hidden: true,
+          noTagsView: true,
+          title: '数字员工详情'
+        }
+      },
+      {
         path: 'bind',
         component: () => import('@/views/agentx/channel/bind.vue'),
         name: 'AgentxChannelBind',

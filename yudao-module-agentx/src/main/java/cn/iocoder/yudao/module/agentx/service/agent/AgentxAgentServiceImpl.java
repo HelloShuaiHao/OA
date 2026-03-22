@@ -23,6 +23,7 @@ import cn.iocoder.yudao.module.agentx.dal.dataobject.instance.AgentxOpenfangInst
 import cn.iocoder.yudao.module.agentx.dal.mysql.instance.AgentxOpenfangInstanceMapper;
 import cn.iocoder.yudao.module.agentx.service.instance.OpenfangApiKeyCrypto;
 import cn.iocoder.yudao.module.agentx.service.metrics.AgentxMetricsService;
+import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.service.user.AdminUserService;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
@@ -185,13 +186,25 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
             respVO.setSelectionMode("rule");
             respVO.setSelectionRules(Collections.emptyList());
         }
+        fillAuditUsers(Collections.singletonList(respVO));
         return respVO;
     }
 
     @Override
     public PageResult<AgentxAgentRespVO> getAgentPage(AgentxAgentPageReqVO pageReqVO) {
         PageResult<AgentxAgentDO> pageResult = agentMapper.selectPage(pageReqVO);
-        return BeanUtils.toBean(pageResult, AgentxAgentRespVO.class);
+        PageResult<AgentxAgentRespVO> result = BeanUtils.toBean(pageResult, AgentxAgentRespVO.class);
+        fillAuditUsers(result.getList());
+        return result;
+    }
+
+    @Override
+    public Boolean checkAgentName(Long id, String agentName) {
+        if (StrUtil.isBlank(agentName)) {
+            return Boolean.FALSE;
+        }
+        AgentxAgentDO agent = agentMapper.selectByAgentName(agentName.trim());
+        return agent == null || ObjectUtil.equal(agent.getId(), id);
     }
 
     private void replaceCapabilities(Long agentId, List<AgentxAgentSaveReqVO.CapabilityItem> capabilities) {
@@ -268,6 +281,27 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
         if (CollUtil.isEmpty(reqVO.getProcesses())) {
             throw exception(ErrorCodeConstants.AGENT_PROCESS_REQUIRED);
         }
+    }
+
+    private void fillAuditUsers(List<? extends AgentxAgentRespVO> list) {
+        if (CollUtil.isEmpty(list)) {
+            return;
+        }
+        for (AgentxAgentRespVO item : list) {
+            item.setCreator(resolveUserDisplayName(item.getCreator()));
+            item.setUpdater(resolveUserDisplayName(item.getUpdater()));
+        }
+    }
+
+    private String resolveUserDisplayName(String userId) {
+        if (StrUtil.isBlank(userId) || !StrUtil.isNumeric(userId)) {
+            return userId;
+        }
+        AdminUserDO user = adminUserService.getUser(Long.valueOf(userId));
+        if (user == null) {
+            return userId;
+        }
+        return StrUtil.blankToDefault(user.getNickname(), user.getUsername());
     }
 
     private void syncAgentUserAndConfig(Long agentId, String trigger) {
