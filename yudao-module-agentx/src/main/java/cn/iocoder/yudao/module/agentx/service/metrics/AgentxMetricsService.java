@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.agentx.service.metrics;
 
 import cn.iocoder.yudao.framework.mybatis.core.query.LambdaQueryWrapperX;
+import cn.iocoder.yudao.framework.tenant.core.util.TenantUtils;
 import cn.iocoder.yudao.module.agentx.dal.dataobject.approval.AgentxApprovalBindingDO;
 import cn.iocoder.yudao.module.agentx.dal.dataobject.task.AgentxTaskProjectionDO;
 import cn.iocoder.yudao.module.agentx.dal.mysql.agent.AgentxAgentMapper;
@@ -54,16 +55,16 @@ public class AgentxMetricsService {
 
     @PostConstruct
     public void initMetrics() {
-        Gauge.builder("agentx_agent_total", agentMapper, mapper -> mapper.selectCount())
+        Gauge.builder("agentx_agent_total", this, AgentxMetricsService::agentTotal)
                 .description("Agent 总数")
                 .register(meterRegistry);
-        Gauge.builder("agentx_task_total", taskProjectionMapper, mapper -> mapper.selectCount())
+        Gauge.builder("agentx_task_total", this, AgentxMetricsService::taskTotal)
                 .description("任务总数")
                 .register(meterRegistry);
         Gauge.builder("agentx_task_success_rate", this, AgentxMetricsService::taskSuccessRate)
                 .description("任务成功率")
                 .register(meterRegistry);
-        Gauge.builder("agentx_approval_total", approvalBindingMapper, mapper -> mapper.selectCount())
+        Gauge.builder("agentx_approval_total", this, AgentxMetricsService::approvalTotal)
                 .description("审批总数")
                 .register(meterRegistry);
         Gauge.builder("agentx_approval_pass_rate", this, AgentxMetricsService::approvalPassRate)
@@ -128,12 +129,12 @@ public class AgentxMetricsService {
     }
 
     private double taskSuccessRate() {
-        long total = taskProjectionMapper.selectCount();
+        long total = safeTenantIgnoreCount(taskProjectionMapper::selectCount);
         if (total == 0) {
             return 1D;
         }
-        long success = taskProjectionMapper.selectCount(new LambdaQueryWrapperX<AgentxTaskProjectionDO>()
-                .eq(AgentxTaskProjectionDO::getProjectionStatus, AgentxTaskProjectionStatusEnum.SUCCEEDED.getStatus()));
+        long success = safeTenantIgnoreCount(() -> taskProjectionMapper.selectCount(new LambdaQueryWrapperX<AgentxTaskProjectionDO>()
+                .eq(AgentxTaskProjectionDO::getProjectionStatus, AgentxTaskProjectionStatusEnum.SUCCEEDED.getStatus())));
         return (double) success / total;
     }
 
@@ -162,14 +163,35 @@ public class AgentxMetricsService {
     }
 
     private double approvalPassRate() {
-        long total = approvalBindingMapper.selectCount(new LambdaQueryWrapperX<AgentxApprovalBindingDO>()
-                .in(AgentxApprovalBindingDO::getDecisionStatus, DECISION_APPROVED, DECISION_REJECTED));
+        long total = safeTenantIgnoreCount(() -> approvalBindingMapper.selectCount(new LambdaQueryWrapperX<AgentxApprovalBindingDO>()
+                .in(AgentxApprovalBindingDO::getDecisionStatus, DECISION_APPROVED, DECISION_REJECTED)));
         if (total == 0) {
             return 1D;
         }
-        long pass = approvalBindingMapper.selectCount(new LambdaQueryWrapperX<AgentxApprovalBindingDO>()
-                .eq(AgentxApprovalBindingDO::getDecisionStatus, DECISION_APPROVED));
+        long pass = safeTenantIgnoreCount(() -> approvalBindingMapper.selectCount(new LambdaQueryWrapperX<AgentxApprovalBindingDO>()
+                .eq(AgentxApprovalBindingDO::getDecisionStatus, DECISION_APPROVED)));
         return (double) pass / total;
+    }
+
+    private double agentTotal() {
+        return safeTenantIgnoreCount(agentMapper::selectCount);
+    }
+
+    private double taskTotal() {
+        return safeTenantIgnoreCount(taskProjectionMapper::selectCount);
+    }
+
+    private double approvalTotal() {
+        return safeTenantIgnoreCount(approvalBindingMapper::selectCount);
+    }
+
+    private long safeTenantIgnoreCount(java.util.concurrent.Callable<Long> callable) {
+        try {
+            Long count = TenantUtils.executeIgnore(callable);
+            return count == null ? 0L : count;
+        } catch (RuntimeException ex) {
+            return 0L;
+        }
     }
 
 }
