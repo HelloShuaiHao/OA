@@ -82,6 +82,25 @@
           <el-option v-for="item in deptOptions" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
       </el-form-item>
+      <el-form-item v-if="formData.agentIds?.length" label="Agent 认证">
+        <div style="width: 100%">
+          <div
+            v-for="agentId in formData.agentIds"
+            :key="agentId"
+            style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px"
+          >
+            <span>{{ resolveAgentName(agentId) }}</span>
+            <el-select
+              :model-value="getAgentAuthMode(agentId)"
+              style="width: 220px"
+              @update:model-value="(val) => setAgentAuthMode(agentId, val as 'public' | 'bind_required')"
+            >
+              <el-option label="公开访问（适合销售/外部咨询）" value="public" />
+              <el-option label="必须绑定（适合公司内部 Agent）" value="bind_required" />
+            </el-select>
+          </div>
+        </div>
+      </el-form-item>
       <el-form-item label="状态" prop="status">
         <el-switch v-model="statusEnabled" />
       </el-form-item>
@@ -124,6 +143,7 @@ const formData = reactive<ChannelApi.AgentxChannelConfigVO>({
   accessControlType: 'all',
   deptIds: [],
   userIds: [],
+  agentAccessPolicies: [],
   status: 1
 })
 const statusEnabled = computed({
@@ -181,11 +201,13 @@ const openForm = async (id?: number) => {
   formData.accessControlType = 'all'
   formData.deptIds = []
   formData.userIds = []
+  formData.agentAccessPolicies = []
   formData.status = 1
   if (id) {
     const data = await ChannelApi.getChannelConfig(id)
     Object.assign(formData, data)
   }
+  syncAgentAccessPolicies()
 }
 
 const submitForm = async () => {
@@ -227,4 +249,35 @@ onMounted(async () => {
   deptOptions.value = depts || []
   await getList()
 })
+
+const resolveAgentName = (agentId: number) => {
+  return agentOptions.value.find((item) => item.id === agentId)?.agentName || `Agent ${agentId}`
+}
+
+const syncAgentAccessPolicies = () => {
+  const existing = new Map((formData.agentAccessPolicies || []).map((item) => [item.agentId, item.authMode]))
+  formData.agentAccessPolicies = (formData.agentIds || []).map((agentId) => ({
+    agentId,
+    authMode: existing.get(agentId) || 'bind_required'
+  }))
+}
+
+const getAgentAuthMode = (agentId: number) => {
+  return formData.agentAccessPolicies?.find((item) => item.agentId === agentId)?.authMode || 'bind_required'
+}
+
+const setAgentAuthMode = (agentId: number, authMode: 'public' | 'bind_required') => {
+  syncAgentAccessPolicies()
+  const target = formData.agentAccessPolicies?.find((item) => item.agentId === agentId)
+  if (target) {
+    target.authMode = authMode
+  }
+}
+
+watch(
+  () => [...(formData.agentIds || [])],
+  () => {
+    syncAgentAccessPolicies()
+  }
+)
 </script>

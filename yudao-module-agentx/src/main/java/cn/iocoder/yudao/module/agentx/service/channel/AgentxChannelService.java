@@ -19,6 +19,8 @@ public interface AgentxChannelService {
 
     AgentxChannelTestRespVO testChannelConnection(AgentxChannelTestReqVO reqVO);
 
+    AgentxChannelAccessEvaluateRespVO evaluateChannelAccess(AgentxChannelAccessEvaluateReqVO reqVO);
+
     List<AgentxUserChannelBindingRespVO> getMyBindings(Long userId);
 
     void unbind(Long id, Long userId);

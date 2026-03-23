@@ -6,6 +6,7 @@ import lombok.Data;
 import javax.validation.constraints.NotBlank;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
+import java.util.Collections;
 import java.util.List;
 
 @Schema(description = "管理后台 - 渠道配置新增/修改 Request VO")
@@ -40,8 +41,23 @@ public class AgentxChannelConfigSaveReqVO {
     @Schema(description = "用户 ID 列表")
     private List<Long> userIds;
 
+    @Schema(description = "Agent 认证策略列表")
+    private List<AgentAccessPolicyItem> agentAccessPolicies = Collections.emptyList();
+
     @Schema(description = "状态（1启用 0停用）", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotNull(message = "状态不能为空")
     private Integer status;
+
+    @Data
+    public static class AgentAccessPolicyItem {
+
+        @Schema(description = "Agent ID", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotNull(message = "Agent ID 不能为空")
+        private Long agentId;
+
+        @Schema(description = "认证模式（public/bind_required）", requiredMode = Schema.RequiredMode.REQUIRED)
+        @NotBlank(message = "认证模式不能为空")
+        private String authMode;
+    }
 
 }

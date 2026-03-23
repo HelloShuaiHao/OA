@@ -77,6 +77,13 @@ public class AgentxChannelController {
         return success(channelService.testChannelConnection(reqVO));
     }
 
+    @PostMapping("/access/evaluate")
+    @Operation(summary = "运行时评估渠道用户是否可访问 Agent 能力")
+    @PermitAll
+    public CommonResult<AgentxChannelAccessEvaluateRespVO> evaluateAccess(@Valid @RequestBody AgentxChannelAccessEvaluateReqVO reqVO) {
+        return success(channelService.evaluateChannelAccess(reqVO));
+    }
+
     @PostMapping("/bind/generate")
     @Operation(summary = "生成绑定链接")
     @PermitAll

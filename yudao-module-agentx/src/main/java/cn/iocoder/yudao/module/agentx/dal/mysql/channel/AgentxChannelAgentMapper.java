@@ -17,4 +17,8 @@ public interface AgentxChannelAgentMapper extends BaseMapperX<AgentxChannelAgent
         delete(AgentxChannelAgentDO::getChannelId, channelId);
     }
 
+    default List<AgentxChannelAgentDO> selectListByAgentId(Long agentId) {
+        return selectList(AgentxChannelAgentDO::getAgentId, agentId);
+    }
+
 }
