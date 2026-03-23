@@ -52,54 +52,7 @@
       />
     </el-card>
 
-    <el-card class="strategy-card" shadow="never">
-      <template #header>
-        <span>流程选择策略</span>
-      </template>
 
-      <el-radio-group v-model="selectionMode">
-        <el-radio value="rule">规则选择</el-radio>
-        <el-radio value="auto">AI 自动选择</el-radio>
-      </el-radio-group>
-
-      <div v-if="selectionMode === 'rule'" class="rules-panel">
-        <el-button size="small" @click="addRule">添加规则</el-button>
-        <el-empty v-if="rules.length === 0" description="暂无规则，请添加" :image-size="72" />
-
-        <div v-for="(rule, index) in rules" :key="index" class="rule-item">
-          <el-select v-model="rule.field" placeholder="字段" style="width: 160px">
-            <el-option label="用户角色" value="userRole" />
-            <el-option label="请假天数" value="leaveDays" />
-            <el-option label="金额" value="amount" />
-          </el-select>
-
-          <el-select v-model="rule.operator" placeholder="操作符" style="width: 120px">
-            <el-option label="等于" value="=" />
-            <el-option label="大于" value=">" />
-            <el-option label="小于" value="<" />
-          </el-select>
-
-          <el-input v-model="rule.value" placeholder="值" style="width: 180px" />
-
-          <span class="arrow">→</span>
-
-          <el-select
-            v-model="rule.processDefinitionId"
-            placeholder="选择目标流程"
-            style="width: 280px"
-          >
-            <el-option
-              v-for="item in selectedProcesses"
-              :key="item.id"
-              :label="`${item.name} (v${item.version})`"
-              :value="item.id"
-            />
-          </el-select>
-
-          <el-button type="danger" link @click="deleteRule(index)">删除</el-button>
-        </div>
-      </div>
-    </el-card>
 
     <el-alert
       type="info"
@@ -123,17 +76,8 @@
 import { MyProcessViewer } from '@/components/bpmnProcessDesigner/package'
 import * as ProcessApi from '@/api/agentx/process'
 
-interface SelectionRule {
-  field: string
-  operator: string
-  value: string
-  processDefinitionId: string
-}
-
 interface StepProcessModel {
   selectedProcesses: ProcessApi.AgentxProcessDefinitionVO[]
-  selectionMode: 'rule' | 'auto'
-  rules: SelectionRule[]
 }
 
 const props = withDefaults(
@@ -142,9 +86,7 @@ const props = withDefaults(
   }>(),
   {
     modelValue: () => ({
-      selectedProcesses: [],
-      selectionMode: 'rule',
-      rules: []
+      selectedProcesses: []
     })
   }
 )
@@ -169,8 +111,6 @@ const queryParams = reactive<ProcessApi.AgentxProcessDefinitionPageReqVO>({
 
 const selectedProcessIds = ref<string[]>([])
 const selectedProcessMap = ref<Record<string, ProcessApi.AgentxProcessDefinitionVO>>({})
-const selectionMode = ref<'rule' | 'auto'>(props.modelValue.selectionMode || 'rule')
-const rules = ref<SelectionRule[]>(props.modelValue.rules || [])
 
 const selectedProcesses = computed(() =>
   selectedProcessIds.value
@@ -180,26 +120,13 @@ const selectedProcesses = computed(() =>
 
 const syncModelValue = () => {
   emit('update:modelValue', {
-    selectedProcesses: selectedProcesses.value,
-    selectionMode: selectionMode.value,
-    rules: rules.value
+    selectedProcesses: selectedProcesses.value
   })
 }
 
 watch(
   () => props.modelValue,
   (value) => {
-    const nextMode = value?.selectionMode || 'rule'
-    if (nextMode !== selectionMode.value) {
-      selectionMode.value = nextMode
-    }
-
-    const nextRules = value?.rules || []
-    if (JSON.stringify(nextRules) !== JSON.stringify(rules.value)) {
-      // deep clone array to avoid reactive proxies cross-contamination
-      rules.value = JSON.parse(JSON.stringify(nextRules))
-    }
-
     const nextIds = (value?.selectedProcesses || []).map((item) => item.id)
     if (JSON.stringify(nextIds) !== JSON.stringify(selectedProcessIds.value)) {
       selectedProcessIds.value = nextIds
@@ -211,7 +138,7 @@ watch(
   { deep: true }
 )
 
-watch([selectedProcesses, selectionMode, rules], syncModelValue, { deep: true })
+watch(() => selectedProcesses.value, syncModelValue, { deep: true })
 
 const getList = async () => {
   loading.value = true
@@ -258,13 +185,7 @@ const resetQuery = () => {
   getList()
 }
 
-const pruneInvalidRules = () => {
-  for (const rule of rules.value) {
-    if (!selectedProcessMap.value[rule.processDefinitionId]) {
-      rule.processDefinitionId = ''
-    }
-  }
-}
+
 
 const isSelected = (id: string) => {
   return selectedProcessIds.value.includes(id)
@@ -280,7 +201,6 @@ const toggleProcessSelection = (row: ProcessApi.AgentxProcessDefinitionVO, check
     delete selectedProcessMap.value[row.id]
     selectedProcessIds.value = selectedProcessIds.value.filter((id) => id !== row.id)
   }
-  pruneInvalidRules()
   syncModelValue()
 }
 
@@ -288,20 +208,7 @@ const handleRowClick = (row: ProcessApi.AgentxProcessDefinitionVO) => {
   toggleProcessSelection(row, !isSelected(row.id))
 }
 
-const addRule = () => {
-  rules.value.push({
-    field: '',
-    operator: '=',
-    value: '',
-    processDefinitionId: selectedProcesses.value[0]?.id || ''
-  })
-  syncModelValue()
-}
 
-const deleteRule = (index: number) => {
-  rules.value.splice(index, 1)
-  syncModelValue()
-}
 
 const previewVisible = ref(false)
 const previewModel = ref<{ bpmnXml: string }>({ bpmnXml: '' })
@@ -393,23 +300,7 @@ onMounted(() => {
   font-size: 13px;
 }
 
-.rules-panel {
-  margin-top: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
 
-.rule-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.arrow {
-  color: var(--el-text-color-secondary);
-}
 
 .summary-alert {
   margin-top: -4px;

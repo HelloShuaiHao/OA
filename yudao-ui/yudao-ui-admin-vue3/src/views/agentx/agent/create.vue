@@ -106,9 +106,7 @@
           {{ templateOptions.find((t) => t.type === formData.templateType)?.name || '-' }}
         </el-descriptions-item>
         <el-descriptions-item label="能力数量">{{ formData.capabilityKeys.length }}</el-descriptions-item>
-        <el-descriptions-item label="流程选择策略">
-          {{ formData.processConfig.selectionMode === 'auto' ? 'AI 自动选择' : '规则选择' }}
-        </el-descriptions-item>
+
         <el-descriptions-item label="已关联流程">
           {{ formData.processConfig.selectedProcesses.map((i) => i.name).join('、') || '-' }}
         </el-descriptions-item>
@@ -142,12 +140,7 @@ import StepProcess from './components/StepProcess.vue'
 
 defineOptions({ name: 'AgentxAgentCreate' })
 
-interface SelectionRule {
-  field: string
-  operator: string
-  value: string
-  processDefinitionId: string
-}
+
 
 interface TemplateOption {
   type: string
@@ -243,9 +236,7 @@ const formData = reactive({
   templateType: '',
   capabilityKeys: [] as string[],
   processConfig: {
-    selectedProcesses: [] as AgentxProcessDefinitionVO[],
-    selectionMode: 'rule' as 'rule' | 'auto',
-    rules: [] as SelectionRule[]
+    selectedProcesses: [] as AgentxProcessDefinitionVO[]
   }
 })
 
@@ -299,22 +290,7 @@ const isBasicInfoComplete = computed(() => {
 })
 
 const isProcessStepComplete = computed(() => {
-  const hasProcesses = formData.processConfig.selectedProcesses.length > 0
-  if (!hasProcesses) {
-    return false
-  }
-  if (formData.processConfig.selectionMode !== 'rule') {
-    return true
-  }
-  if (formData.processConfig.selectedProcesses.length <= 1) {
-    return true
-  }
-  if (formData.processConfig.rules.length === 0) {
-    return false
-  }
-  return formData.processConfig.rules.every(
-    (rule) => !!rule.field && !!rule.operator && !!rule.value && !!rule.processDefinitionId
-  )
+  return formData.processConfig.selectedProcesses.length > 0
 })
 
 const nextStepDisabled = computed(() => {
@@ -394,19 +370,6 @@ const nextStep = async () => {
       message.warning('至少关联 1 个流程')
       return
     }
-    if (formData.processConfig.selectionMode === 'rule') {
-      if (formData.processConfig.selectedProcesses.length > 1 && formData.processConfig.rules.length === 0) {
-        message.warning('多流程下规则模式至少配置 1 条规则')
-        return
-      }
-      const validRule = formData.processConfig.rules.every(
-        (rule) => !!rule.field && !!rule.operator && !!rule.value && !!rule.processDefinitionId
-      )
-      if (!validRule) {
-        message.warning('请完善规则配置')
-        return
-      }
-    }
   }
   if (activeStep.value < 4) {
     activeStep.value += 1
@@ -415,12 +378,8 @@ const nextStep = async () => {
 
 const handleProcessConfigChange = (value: {
   selectedProcesses: AgentxProcessDefinitionVO[]
-  selectionMode: 'rule' | 'auto'
-  rules: SelectionRule[]
 }) => {
   formData.processConfig.selectedProcesses = value.selectedProcesses || []
-  formData.processConfig.selectionMode = value.selectionMode || 'rule'
-  formData.processConfig.rules = value.rules || []
 }
 
 const buildPayload = (): AgentApi.AgentVO => {
@@ -445,8 +404,8 @@ const buildPayload = (): AgentApi.AgentVO => {
       processName: item.name,
       processVersion: item.version
     })),
-    selectionMode: formData.processConfig.selectionMode,
-    selectionRules: formData.processConfig.rules
+    selectionMode: 'auto',
+    selectionRules: []
   }
 }
 
@@ -497,13 +456,6 @@ const loadEditData = async () => {
     key: item.processDefinitionKey || '',
     name: item.processName || item.processDefinitionKey || item.processDefinitionId,
     version: item.processVersion || 1
-  }))
-  formData.processConfig.selectionMode = (data.selectionMode as 'rule' | 'auto') || 'rule'
-  formData.processConfig.rules = (data.selectionRules || []).map((rule) => ({
-    field: rule.field,
-    operator: rule.operator,
-    value: rule.value,
-    processDefinitionId: rule.processDefinitionId
   }))
 }
 
