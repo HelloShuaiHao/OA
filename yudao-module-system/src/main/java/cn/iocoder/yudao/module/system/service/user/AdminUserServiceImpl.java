@@ -582,6 +582,20 @@ public class AdminUserServiceImpl implements AdminUserService {
         userMapper.updateById(update);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteAgentUser(Long agentId) {
+        if (agentId == null) {
+            return;
+        }
+        List<AdminUserDO> users = userMapper.selectList(new LambdaQueryWrapperX<AdminUserDO>()
+                .eq(AdminUserDO::getAgentId, agentId));
+        if (CollUtil.isEmpty(users)) {
+            return;
+        }
+        users.forEach(user -> deleteUser(user.getId()));
+    }
+
     /**
      * 对密码进行加密
      *

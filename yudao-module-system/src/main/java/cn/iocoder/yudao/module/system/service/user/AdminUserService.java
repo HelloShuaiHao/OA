@@ -236,4 +236,11 @@ public interface AdminUserService {
      */
     void createOrUpdateAgentUser(Long agentId, String username, String nickname, Long deptId, String avatar, Integer status);
 
+    /**
+     * 删除数字员工映射用户
+     *
+     * @param agentId Agent ID
+     */
+    void deleteAgentUser(Long agentId);
+
 }

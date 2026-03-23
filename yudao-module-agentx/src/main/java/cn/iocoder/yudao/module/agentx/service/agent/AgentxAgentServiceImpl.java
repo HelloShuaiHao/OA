@@ -27,6 +27,7 @@ import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.service.user.AdminUserService;
 import cn.iocoder.yudao.module.system.api.dept.DeptApi;
 import cn.iocoder.yudao.module.system.api.dept.dto.DeptRespDTO;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -43,6 +44,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
@@ -142,9 +144,12 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteAgent(Long id) {
         validateAgentExists(id);
+        AgentxAgentDO agent = agentMapper.selectById(id);
+        deleteFromOpenfang(agent);
         agentMapper.deleteById(id);
         capabilityMapper.deleteByAgentId(id);
         processMapper.deleteByAgentId(id);
+        adminUserService.deleteAgentUser(id);
     }
 
     @Override
@@ -311,12 +316,19 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
         }
         adminUserService.createOrUpdateAgentUser(
                 agent.getId(),
-                "agent_" + agent.getAgentKey(),
+                buildAgentUsername(agent),
                 agent.getAgentName(),
                 agent.getDeptId(),
                 agent.getAvatarUrl(),
                 toSystemUserStatus(agent.getStatus()));
         persistConfigVersionAndSync(agent, trigger);
+    }
+
+    private String buildAgentUsername(AgentxAgentDO agent) {
+        // system_users.username 最大长度为 30，这里保留稳定前缀并对 suffix 做硬截断。
+        String suffix = StrUtil.blankToDefault(agent.getAgentKey(), String.valueOf(agent.getId()));
+        suffix = StrUtil.subPre(suffix, 24);
+        return "agent_" + suffix;
     }
 
     private Integer toSystemUserStatus(Integer agentStatus) {
@@ -360,16 +372,7 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
             return SyncResult.failed("未配置可用 OpenFang 实例");
         }
         AgentxOpenfangInstanceDO instance = instances.get(0);
-        String endpoint = StrUtil.removeSuffix(instance.getEndpoint(), "/") + "/api/agents/register";
-
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("agentId", agent.getId());
-        payload.put("agentKey", agent.getAgentKey());
-        payload.put("agentName", agent.getAgentName());
-        payload.put("templateType", agent.getTemplateType());
-        payload.put("status", agent.getStatus());
-        payload.put("capabilities", capabilities);
-        payload.put("processes", processes);
+        String baseUrl = StrUtil.removeSuffix(instance.getEndpoint(), "/");
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -380,18 +383,20 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
         try {
             for (int attempt = 1; attempt <= OPENFANG_SYNC_MAX_ATTEMPTS; attempt++) {
                 try {
-                    ResponseEntity<Object> response = restTemplate.exchange(endpoint, HttpMethod.POST,
-                            new HttpEntity<>(payload, headers), Object.class);
-                    if (response.getStatusCode().is2xxSuccessful()) {
+                    String openfangAgentId = findOpenfangAgentId(baseUrl, headers, agent);
+                    if (ObjectUtil.equal(agent.getStatus(), STATUS_ACTIVE)) {
+                        if (StrUtil.isBlank(openfangAgentId)) {
+                            openfangAgentId = createOpenfangAgent(baseUrl, headers, agent, capabilities);
+                        }
+                        patchOpenfangAgentConfig(baseUrl, headers, openfangAgentId, agent, capabilities, processes);
                         metricsService.recordOpenfangCall(true);
                         return SyncResult.success("OpenFang 同步成功");
                     }
-                    if (shouldRetry(response.getStatusCodeValue(), attempt)) {
-                        backoff(attempt);
-                        continue;
+                    if (StrUtil.isNotBlank(openfangAgentId)) {
+                        deleteOpenfangAgent(baseUrl, headers, openfangAgentId);
                     }
-                    metricsService.recordOpenfangCall(false);
-                    return SyncResult.failed("OpenFang 同步失败，HTTP=" + response.getStatusCodeValue());
+                    metricsService.recordOpenfangCall(true);
+                    return SyncResult.success("OpenFang 同步成功");
                 } catch (Exception ex) {
                     if (attempt >= OPENFANG_SYNC_MAX_ATTEMPTS) {
                         throw ex;
@@ -405,6 +410,153 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
             metricsService.recordOpenfangCall(false);
             return SyncResult.failed("OpenFang 同步异常：" + ex.getMessage());
         }
+    }
+
+    private void deleteFromOpenfang(AgentxAgentDO agent) {
+        if (agent == null) {
+            return;
+        }
+        List<AgentxOpenfangInstanceDO> instances = openfangInstanceMapper.selectListByStatus(1);
+        if (CollUtil.isEmpty(instances)) {
+            return;
+        }
+        AgentxOpenfangInstanceDO instance = instances.get(0);
+        String baseUrl = StrUtil.removeSuffix(instance.getEndpoint(), "/");
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String apiKey = openfangApiKeyCrypto.decrypt(instance.getApiKeyEncrypted());
+        if (StrUtil.isNotBlank(apiKey)) {
+            headers.setBearerAuth(apiKey);
+        }
+        try {
+            String openfangAgentId = findOpenfangAgentId(baseUrl, headers, agent);
+            if (StrUtil.isNotBlank(openfangAgentId)) {
+                deleteOpenfangAgent(baseUrl, headers, openfangAgentId);
+            }
+        } catch (Exception ignore) {
+            // 数字员工删除以 OA 为准，不因 OpenFang 清理失败阻塞本地删除。
+        }
+    }
+
+    private String findOpenfangAgentId(String baseUrl, HttpHeaders headers, AgentxAgentDO agent) {
+        ResponseEntity<List<Map<String, Object>>> response = restTemplate.exchange(
+                baseUrl + "/api/agents",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),
+                new ParameterizedTypeReference<List<Map<String, Object>>>() {
+                });
+        List<Map<String, Object>> data = response.getBody();
+        if (CollUtil.isEmpty(data)) {
+            return null;
+        }
+        String expectedName = buildOpenfangAgentName(agent);
+        return data.stream()
+                .filter(Objects::nonNull)
+                .filter(item -> StrUtil.equals(expectedName, (String) item.get("name")))
+                .map(item -> (String) item.get("id"))
+                .filter(StrUtil::isNotBlank)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private String createOpenfangAgent(String baseUrl, HttpHeaders headers, AgentxAgentDO agent,
+                                       List<AgentxAgentCapabilityDO> capabilities) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("manifest_toml", buildOpenfangManifest(agent, capabilities));
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                baseUrl + "/api/agents",
+                HttpMethod.POST,
+                new HttpEntity<>(payload, headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {
+                });
+        if (!response.getStatusCode().is2xxSuccessful()) {
+            throw new IllegalStateException("OpenFang 创建失败，HTTP=" + response.getStatusCodeValue());
+        }
+        String agentId = response.getBody() == null ? null : (String) response.getBody().get("agent_id");
+        if (StrUtil.isBlank(agentId)) {
+            throw new IllegalStateException("OpenFang 创建失败，缺少 agent_id");
+        }
+        return agentId;
+    }
+
+    private void patchOpenfangAgentConfig(String baseUrl, HttpHeaders headers, String openfangAgentId,
+                                          AgentxAgentDO agent,
+                                          List<AgentxAgentCapabilityDO> capabilities,
+                                          List<AgentxAgentProcessDO> processes) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("description", buildOpenfangDescription(agent, capabilities, processes));
+        payload.put("avatar_url", agent.getAvatarUrl());
+        restTemplate.exchange(
+                baseUrl + "/api/agents/" + openfangAgentId + "/config",
+                HttpMethod.PATCH,
+                new HttpEntity<>(payload, headers),
+                new ParameterizedTypeReference<Map<String, Object>>() {
+                });
+    }
+
+    private void deleteOpenfangAgent(String baseUrl, HttpHeaders headers, String openfangAgentId) {
+        restTemplate.exchange(
+                baseUrl + "/api/agents/" + openfangAgentId,
+                HttpMethod.DELETE,
+                new HttpEntity<>(headers),
+                Void.class);
+    }
+
+    private String buildOpenfangAgentName(AgentxAgentDO agent) {
+        return "oa-agent-" + StrUtil.subPre(agent.getAgentKey(), 24);
+    }
+
+    private String buildOpenfangManifest(AgentxAgentDO agent, List<AgentxAgentCapabilityDO> capabilities) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("name = \"").append(tomlEscape(buildOpenfangAgentName(agent))).append("\"\n");
+        builder.append("version = \"0.1.0\"\n");
+        builder.append("description = \"").append(tomlEscape(StrUtil.blankToDefault(agent.getDescription(), agent.getAgentName()))).append("\"\n");
+        builder.append("author = \"agentx\"\n");
+        builder.append("module = \"builtin:chat\"\n\n");
+        builder.append("[model]\n");
+        builder.append("provider = \"openai\"\n");
+        builder.append("model = \"gpt-4o-mini\"\n");
+        builder.append("system_prompt = \"").append(tomlEscape(buildOpenfangSystemPrompt(agent, capabilities))).append("\"\n\n");
+        builder.append("[capabilities]\n");
+        builder.append("tools = []\n");
+        builder.append("memory_read = [\"*\"]\n");
+        builder.append("memory_write = [\"self.*\"]\n");
+        return builder.toString();
+    }
+
+    private String buildOpenfangSystemPrompt(AgentxAgentDO agent, List<AgentxAgentCapabilityDO> capabilities) {
+        String capabilityText = CollUtil.isEmpty(capabilities) ? "无" :
+                capabilities.stream()
+                        .map(item -> StrUtil.blankToDefault(item.getCapabilityName(), item.getCapabilityKey()))
+                        .filter(StrUtil::isNotBlank)
+                        .reduce((left, right) -> left + "、" + right)
+                        .orElse("无");
+        return StrUtil.format("你是 OA 数字员工：{}。部门：{}。模板：{}。可用能力：{}。请遵循 OA 治理约束执行任务。",
+                agent.getAgentName(),
+                StrUtil.blankToDefault(agent.getDeptName(), "未分配"),
+                StrUtil.blankToDefault(agent.getTemplateType(), "custom"),
+                capabilityText);
+    }
+
+    private String buildOpenfangDescription(AgentxAgentDO agent,
+                                            List<AgentxAgentCapabilityDO> capabilities,
+                                            List<AgentxAgentProcessDO> processes) {
+        int capabilityCount = CollUtil.size(capabilities);
+        int processCount = CollUtil.size(processes);
+        return StrUtil.format("{} | agentKey={} | template={} | capabilities={} | processes={}",
+                StrUtil.blankToDefault(agent.getDescription(), agent.getAgentName()),
+                agent.getAgentKey(),
+                StrUtil.blankToDefault(agent.getTemplateType(), "custom"),
+                capabilityCount,
+                processCount);
+    }
+
+    private String tomlEscape(String value) {
+        return StrUtil.blankToDefault(value, "")
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\r", " ")
+                .replace("\n", " ");
     }
 
     private boolean shouldRetry(int statusCode, int attempt) {
