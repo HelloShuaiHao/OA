@@ -24,4 +24,8 @@ public interface AgentxAgentMapper extends BaseMapperX<AgentxAgentDO> {
         return selectOne(AgentxAgentDO::getAgentName, agentName);
     }
 
+    default AgentxAgentDO selectByAgentKey(String agentKey) {
+        return selectOne(AgentxAgentDO::getAgentKey, agentKey);
+    }
+
 }

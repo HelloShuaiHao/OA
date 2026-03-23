@@ -1,6 +1,7 @@
 package cn.iocoder.yudao.module.agentx.controller.admin.process;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.io.IoUtil;
 import cn.iocoder.yudao.framework.common.pojo.CommonResult;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.object.PageUtils;
@@ -35,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
 import javax.validation.Valid;
+import java.io.InputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -94,6 +96,7 @@ public class AgentxProcessController {
                 }
             }
 
+            final Map<String, BpmCategoryDO> finalCategoryMap = categoryMap;
             List<AgentxProcessDefinitionRespVO> list = convertList(definitions, pd -> {
                 AgentxProcessDefinitionRespVO vo = new AgentxProcessDefinitionRespVO();
                 vo.setId(pd.getId());
@@ -101,7 +104,7 @@ public class AgentxProcessController {
                 vo.setName(pd.getName());
                 vo.setCategory(pd.getCategory());
                 vo.setVersion(pd.getVersion());
-                BpmCategoryDO category = categoryMap.get(pd.getCategory());
+                BpmCategoryDO category = finalCategoryMap.get(pd.getCategory());
                 vo.setCategoryName(category == null ? null : category.getName());
                 return vo;
             });
@@ -129,7 +132,9 @@ public class AgentxProcessController {
             vo.setName(pd.getName());
             vo.setCategory(pd.getCategory());
             vo.setVersion(pd.getVersion());
-            vo.setBpmnXml(BpmnModelUtils.getBpmnXml(repositoryService.getProcessModel(id)));
+            try (InputStream processModel = repositoryService.getProcessModel(id)) {
+                vo.setBpmnXml(processModel != null ? BpmnModelUtils.getBpmnXml(IoUtil.readBytes(processModel)) : null);
+            }
             return success(vo);
         } catch (Exception ex) {
             log.error("[getDefinition][load process definition failed][id={}]", id, ex);

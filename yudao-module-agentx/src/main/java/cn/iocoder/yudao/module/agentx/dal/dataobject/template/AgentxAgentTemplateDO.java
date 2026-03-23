@@ -1,5 +1,6 @@
 package cn.iocoder.yudao.module.agentx.dal.dataobject.template;
 
+import cn.iocoder.yudao.framework.tenant.core.aop.TenantIgnore;
 import cn.iocoder.yudao.framework.mybatis.core.dataobject.BaseDO;
 import com.baomidou.mybatisplus.annotation.KeySequence;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -9,6 +10,7 @@ import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
 @TableName("agentx_agent_template")
+@TenantIgnore
 @KeySequence("agentx_agent_template_seq")
 @Data
 @EqualsAndHashCode(callSuper = true)
