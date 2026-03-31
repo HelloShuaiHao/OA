@@ -93,6 +93,7 @@ import * as ChannelApi from '@/api/agentx/channel'
 defineOptions({ name: 'AgentxChannelBinding' })
 
 const message = useMessage()
+const route = useRoute()
 const activeTab = ref('mine')
 
 const myLoading = ref(false)
@@ -166,6 +167,15 @@ const handleAdminUnbind = async (id: number) => {
 }
 
 onMounted(async () => {
+  const tab = String(route.query.tab || '')
+  if (tab === 'admin' && hasPermission(['agentx:channel:query'])) {
+    activeTab.value = 'admin'
+  }
+  const userId = Number(route.query.userId)
+  if (Number.isFinite(userId) && userId > 0) {
+    queryParams.userId = userId
+    activeTab.value = 'admin'
+  }
   await getMyBindings()
   await getAdminList()
 })

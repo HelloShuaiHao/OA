@@ -31,10 +31,13 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Iterator;
 import java.util.Map;
+import org.springframework.web.util.ContentCachingRequestWrapper;
 
 import static cn.iocoder.yudao.framework.apilog.core.interceptor.ApiAccessLogInterceptor.ATTRIBUTE_HANDLER_METHOD;
 import static cn.iocoder.yudao.framework.common.util.json.JsonUtils.toJsonString;
@@ -68,19 +71,36 @@ public class ApiAccessLogFilter extends ApiRequestFilter {
         // 获得开始时间
         LocalDateTime beginTime = LocalDateTime.now();
         // 提前获得参数，避免 XssFilter 过滤处理
-        Map<String, String> queryString = ServletUtils.getParamMap(request);
-        String requestBody = ServletUtils.isJsonRequest(request) ? ServletUtils.getBody(request) : null;
+        ContentCachingRequestWrapper requestWrapper = new ContentCachingRequestWrapper(request);
+        Map<String, String> queryString = ServletUtils.getParamMap(requestWrapper);
+        String requestBody = null;
 
         try {
             // 继续过滤器
-            filterChain.doFilter(request, response);
+            filterChain.doFilter(requestWrapper, response);
             // 正常执行，记录日志
+            requestBody = buildRequestBody(requestWrapper);
             createApiAccessLog(request, beginTime, queryString, requestBody, null);
         } catch (Exception ex) {
             // 异常执行，记录日志
+            requestBody = buildRequestBody(requestWrapper);
             createApiAccessLog(request, beginTime, queryString, requestBody, ex);
             throw ex;
         }
+    }
+
+    private String buildRequestBody(ContentCachingRequestWrapper request) {
+        if (!ServletUtils.isJsonRequest(request)) {
+            return null;
+        }
+        byte[] content = request.getContentAsByteArray();
+        if (content == null || content.length == 0) {
+            return null;
+        }
+        Charset charset = request.getCharacterEncoding() != null
+                ? Charset.forName(request.getCharacterEncoding())
+                : StandardCharsets.UTF_8;
+        return new String(content, charset);
     }
 
     private void createApiAccessLog(HttpServletRequest request, LocalDateTime beginTime,

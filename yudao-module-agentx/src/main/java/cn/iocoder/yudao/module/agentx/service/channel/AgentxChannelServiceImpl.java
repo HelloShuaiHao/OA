@@ -4,6 +4,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.codec.Base64;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.iocoder.yudao.framework.common.enums.CommonStatusEnum;
 import cn.iocoder.yudao.framework.common.pojo.PageResult;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.framework.common.util.object.BeanUtils;
@@ -398,7 +399,7 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
         }
         List<Long> channelIds = convertList(relations, AgentxChannelAgentDO::getChannelId);
         return channelConfigMapper.selectListByIds(channelIds).stream()
-                .filter(item -> ObjectUtil.equal(item.getStatus(), 1))
+                .filter(item -> CommonStatusEnum.isEnable(item.getStatus()))
                 .filter(item -> StrUtil.equals(channelType, item.getChannelType()))
                 .findFirst()
                 .orElse(null);
@@ -457,7 +458,8 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
     }
 
     private void replaceChannelAgents(Long channelId, List<Long> agentIds) {
-        channelAgentMapper.deleteByChannelId(channelId);
+        // Use physical delete here to avoid unique-index collisions with legacy soft-deleted rows.
+        channelAgentMapper.deleteForceByChannelId(channelId);
         if (CollUtil.isEmpty(agentIds)) {
             return;
         }
@@ -470,7 +472,7 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
         if (channel == null) {
             return;
         }
-        if (!ObjectUtil.equal(channel.getStatus(), 1)) {
+        if (!CommonStatusEnum.isEnable(channel.getStatus())) {
             removeChannelFromOpenfang(channel);
             return;
         }
@@ -552,11 +554,19 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
         if (CollUtil.isEmpty(relations)) {
             return null;
         }
-        AgentxAgentDO agent = agentMapper.selectById(relations.get(0).getAgentId());
-        if (agent == null || StrUtil.isBlank(agent.getAgentKey())) {
-            return null;
+        for (AgentxChannelAgentDO relation : relations) {
+            AgentxAgentDO agent = agentMapper.selectById(relation.getAgentId());
+            if (agent == null || !ObjectUtil.equal(agent.getStatus(), 1)) {
+                continue;
+            }
+            return buildOpenfangAgentName(agent);
         }
-        return "oa-agent-" + StrUtil.subPre(agent.getAgentKey(), 24);
+        return null;
+    }
+
+    private String buildOpenfangAgentName(AgentxAgentDO agent) {
+        String displayName = StrUtil.blankToDefault(agent.getAgentName(), "OA 数字员工");
+        return displayName + " [OA#" + agent.getId() + "]";
     }
 
     private String encryptBotToken(String botToken) {

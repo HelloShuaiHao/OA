@@ -1,5 +1,5 @@
 import { CACHE_KEY, useCache } from '@/hooks/web/useCache'
-import {hasPermission} from "@/directives/permission/hasPermi";
+import { hasPermission as hasPermiDirective } from '@/directives/permission/hasPermi'
 
 
 const { t } = useI18n() // 国际化
@@ -10,7 +10,14 @@ const { t } = useI18n() // 国际化
  * @returns {Boolean}
  */
 export function checkPermi(permission: string[]) {
-  return hasPermission(permission)
+  return hasPermiDirective(permission)
+}
+
+/**
+ * 与历史调用保持兼容
+ */
+export function hasPermission(permission: string[]) {
+  return hasPermiDirective(permission)
 }
 
 /**

@@ -145,7 +145,7 @@
             :formatter="dateFormatter"
             width="180"
           />
-          <el-table-column label="操作" align="center" width="160">
+          <el-table-column label="操作" align="center" width="240">
             <template #default="scope">
               <div class="flex items-center justify-center">
                 <el-button
@@ -155,6 +155,14 @@
                   v-hasPermi="['system:user:update']"
                 >
                   <Icon icon="ep:edit" />修改
+                </el-button>
+                <el-button
+                  type="primary"
+                  link
+                  @click="openChannelBinding(scope.row)"
+                  v-hasPermi="['agentx:channel:query']"
+                >
+                  <Icon icon="ep:link" />渠道绑定
                 </el-button>
                 <el-dropdown
                   @command="(command) => handleCommand(command, scope.row)"
@@ -225,6 +233,7 @@ defineOptions({ name: 'SystemUser' })
 
 const message = useMessage() // 消息弹窗
 const { t } = useI18n() // 国际化
+const router = useRouter()
 
 const loading = ref(true) // 列表的加载中
 const total = ref(0) // 列表的总页数
@@ -388,6 +397,16 @@ const handleResetPwd = async (row: UserApi.UserVO) => {
 const assignRoleFormRef = ref()
 const handleRole = (row: UserApi.UserVO) => {
   assignRoleFormRef.value.open(row)
+}
+
+const openChannelBinding = (row: UserApi.UserVO) => {
+  router.push({
+    path: '/agentx/channel/binding',
+    query: {
+      tab: 'admin',
+      userId: String(row.id)
+    }
+  })
 }
 
 /** 初始化 */
