@@ -4,6 +4,7 @@ import cn.iocoder.yudao.module.agentx.dal.dataobject.agent.AgentxAgentProcessDO;
 import cn.iocoder.yudao.module.agentx.dal.mysql.agent.AgentxAgentProcessMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -64,7 +65,7 @@ class AgentxProcessSelectionServiceImplTest {
     }
 
     private AgentxProcessSelectionServiceImpl buildService() {
-        AgentxProcessSelectionServiceImpl impl = new AgentxProcessSelectionServiceImpl();
+        AgentxProcessSelectionServiceImpl impl = new AgentxProcessSelectionServiceImpl(new RestTemplateBuilder());
         try {
             java.lang.reflect.Field field = AgentxProcessSelectionServiceImpl.class.getDeclaredField("processMapper");
             field.setAccessible(true);
