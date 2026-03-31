@@ -273,6 +273,20 @@ const resetTaskForm = () => {
     return
   }
 
+  if (businessObject.candidateStrategy != undefined) {
+    userTaskForm.value.candidateStrategy = parseInt(String(businessObject.candidateStrategy)) as any
+  }
+  const attrCandidateParamStr = businessObject.candidateParam
+  if (attrCandidateParamStr != undefined && attrCandidateParamStr !== null && attrCandidateParamStr !== '') {
+    applyCandidateParam(attrCandidateParamStr)
+    otherExtensions.value =
+      (businessObject?.extensionElements?.values?.filter(
+        (ex) => ex.$type !== `${prefix}:CandidateStrategy` && ex.$type !== `${prefix}:CandidateParam`
+      ) ?? [])
+    userTaskForm.value.skipExpression = businessObject.skipExpression ?? ''
+    return
+  }
+
   const extensionElements =
     businessObject?.extensionElements ??
     bpmnInstances().moddle.create('bpmn:ExtensionElements', { values: [] })
@@ -282,40 +296,7 @@ const resetTaskForm = () => {
   const candidateParamStr = extensionElements.values?.filter(
     (ex) => ex.$type === `${prefix}:CandidateParam`
   )?.[0]?.value
-  if (candidateParamStr && candidateParamStr.length > 0) {
-    if (userTaskForm.value.candidateStrategy === CandidateStrategy.EXPRESSION) {
-      // 特殊：流程表达式，只有一个 input 输入框
-      userTaskForm.value.candidateParam = [candidateParamStr]
-    } else if (userTaskForm.value.candidateStrategy == CandidateStrategy.MULTI_LEVEL_DEPT_LEADER) {
-      // 特殊：多级不部门负责人，需要通过'|'分割
-      userTaskForm.value.candidateParam = candidateParamStr
-        .split('|')[0]
-        .split(',')
-        .map((item) => {
-          // 如果数字超出了最大安全整数范围，则将其作为字符串处理
-          let num = Number(item)
-          return num > Number.MAX_SAFE_INTEGER || num < -Number.MAX_SAFE_INTEGER ? item : num
-        })
-      deptLevel.value = +candidateParamStr.split('|')[1]
-    } else if (
-      userTaskForm.value.candidateStrategy == CandidateStrategy.START_USER_DEPT_LEADER ||
-      userTaskForm.value.candidateStrategy == CandidateStrategy.START_USER_MULTI_LEVEL_DEPT_LEADER
-    ) {
-      userTaskForm.value.candidateParam = +candidateParamStr
-      deptLevel.value = +candidateParamStr
-    } else if (userTaskForm.value.candidateStrategy == CandidateStrategy.FORM_DEPT_LEADER) {
-      userTaskForm.value.candidateParam = candidateParamStr.split('|')[0]
-      deptLevel.value = +candidateParamStr.split('|')[1]
-    } else {
-      userTaskForm.value.candidateParam = candidateParamStr.split(',').map((item) => {
-        // 如果数字超出了最大安全整数范围，则将其作为字符串处理
-        let num = Number(item)
-        return num > Number.MAX_SAFE_INTEGER || num < -Number.MAX_SAFE_INTEGER ? item : num
-      })
-    }
-  } else {
-    userTaskForm.value.candidateParam = []
-  }
+  applyCandidateParam(candidateParamStr)
 
   otherExtensions.value =
     extensionElements.values?.filter(
@@ -347,6 +328,40 @@ const resetTaskForm = () => {
     }
   } else {
     userTaskForm.value.candidateParam = []
+  }
+}
+
+const applyCandidateParam = (candidateParamStr) => {
+  if (!candidateParamStr && candidateParamStr !== 0) {
+    userTaskForm.value.candidateParam = []
+    return
+  }
+  const rawValue = String(candidateParamStr)
+  if (userTaskForm.value.candidateStrategy === CandidateStrategy.EXPRESSION) {
+    userTaskForm.value.candidateParam = [rawValue]
+  } else if (userTaskForm.value.candidateStrategy == CandidateStrategy.MULTI_LEVEL_DEPT_LEADER) {
+    userTaskForm.value.candidateParam = rawValue
+      .split('|')[0]
+      .split(',')
+      .map((item) => {
+        let num = Number(item)
+        return num > Number.MAX_SAFE_INTEGER || num < -Number.MAX_SAFE_INTEGER ? item : num
+      })
+    deptLevel.value = +rawValue.split('|')[1]
+  } else if (
+    userTaskForm.value.candidateStrategy == CandidateStrategy.START_USER_DEPT_LEADER ||
+    userTaskForm.value.candidateStrategy == CandidateStrategy.START_USER_MULTI_LEVEL_DEPT_LEADER
+  ) {
+    userTaskForm.value.candidateParam = +rawValue
+    deptLevel.value = +rawValue
+  } else if (userTaskForm.value.candidateStrategy == CandidateStrategy.FORM_DEPT_LEADER) {
+    userTaskForm.value.candidateParam = rawValue.split('|')[0]
+    deptLevel.value = +rawValue.split('|')[1]
+  } else {
+    userTaskForm.value.candidateParam = rawValue.split(',').map((item) => {
+      let num = Number(item)
+      return num > Number.MAX_SAFE_INTEGER || num < -Number.MAX_SAFE_INTEGER ? item : num
+    })
   }
 }
 
@@ -386,22 +401,18 @@ const updateElementTask = () => {
     candidateParam = deptLevel.value + ''
   }
 
-  const extensions = bpmnInstances().moddle.create('bpmn:ExtensionElements', {
-    values: [
-      ...otherExtensions.value,
-      bpmnInstances().moddle.create(`${prefix}:CandidateStrategy`, {
-        value: userTaskForm.value.candidateStrategy
-      }),
-      bpmnInstances().moddle.create(`${prefix}:CandidateParam`, {
-        value: candidateParam
-      })
-    ]
-  })
+  const currentExtensions =
+    bpmnElement.value.businessObject?.extensionElements?.values?.filter(
+      (ex) => ex.$type !== `${prefix}:CandidateStrategy` && ex.$type !== `${prefix}:CandidateParam`
+    ) ?? []
+  const extensions = bpmnInstances().moddle.create('bpmn:ExtensionElements', { values: currentExtensions })
   bpmnInstances().modeling.updateProperties(toRaw(bpmnElement.value), {
-    extensionElements: extensions
+    extensionElements: extensions,
+    candidateStrategy: userTaskForm.value.candidateStrategy,
+    candidateParam
   })
+  otherExtensions.value = currentExtensions
 
-  // 改用通过extensionElements来存储数据
   return
   bpmnInstances().modeling.updateProperties(toRaw(bpmnElement.value), {
     candidateStrategy: userTaskForm.value.candidateStrategy,

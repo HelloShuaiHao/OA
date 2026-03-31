@@ -320,6 +320,22 @@ const highlightedCode = (code: string) => {
 
 provide('configGlobal', props)
 let bpmnModeler: any = null
+const handleCanvasDomClick = (event: MouseEvent) => {
+  if (!bpmnModeler) {
+    return
+  }
+  const target = event.target as HTMLElement | null
+  const elementNode = target?.closest?.('[data-element-id]') as HTMLElement | null
+  const elementId = elementNode?.getAttribute('data-element-id')
+  if (!elementId) {
+    return
+  }
+  const elementRegistry = bpmnModeler.get('elementRegistry')
+  const element = elementRegistry?.get?.(elementId)
+  if (element) {
+    emit('element-click', element, { originalEvent: event })
+  }
+}
 const defaultZoom = ref(1)
 const previewModelVisible = ref(false)
 const simulationStatus = ref(false)
@@ -327,6 +343,7 @@ const previewResult = ref('')
 const previewType = ref('xml')
 const recoverable = ref(false)
 const revocable = ref(false)
+const lastSyncedXml = ref('')
 const additionalModules = computed(() => {
   console.log(props.additionalModel, 'additionalModel')
   const Modules: any[] = []
@@ -491,6 +508,7 @@ const createNewDiagram = async (xml) => {
     // console.log(xmlString, 'xmlString')
     // console.log(this.bpmnModeler.importXML);
     let { warnings } = await bpmnModeler.importXML(xmlString)
+    lastSyncedXml.value = xmlString
     console.log(warnings, 'warnings')
     if (warnings && warnings.length) {
       warnings.forEach((warn) => console.warn(warn))
@@ -646,8 +664,20 @@ const previewProcessJson = () => {
 onMounted(() => {
   initBpmnModeler()
   createNewDiagram(props.value)
+  bpmnCanvas.value?.addEventListener?.('click', handleCanvasDomClick, true)
 })
+
+watch(
+  () => props.value,
+  async (value) => {
+    if (!bpmnModeler || !value || value === lastSyncedXml.value) {
+      return
+    }
+    await createNewDiagram(value)
+  }
+)
 onBeforeUnmount(() => {
+  bpmnCanvas.value?.removeEventListener?.('click', handleCanvasDomClick, true)
   if (bpmnModeler) bpmnModeler.destroy()
   emit('destroy', bpmnModeler)
   bpmnModeler = null

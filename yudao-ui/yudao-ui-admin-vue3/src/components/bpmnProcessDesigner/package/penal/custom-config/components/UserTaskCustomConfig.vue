@@ -419,9 +419,23 @@ const updateAssignEmptyUserIds = () => {
 }
 
 const updateElementExtensions = () => {
+  const currentExtensions =
+    bpmnElement.value.businessObject?.extensionElements?.values?.filter(
+      (ex) =>
+        ex.$type !== `${prefix}:AssignStartUserHandlerType` &&
+        ex.$type !== `${prefix}:RejectHandlerType` &&
+        ex.$type !== `${prefix}:RejectReturnTaskId` &&
+        ex.$type !== `${prefix}:AssignEmptyHandlerType` &&
+        ex.$type !== `${prefix}:AssignEmptyUserIds` &&
+        ex.$type !== `${prefix}:ButtonsSetting` &&
+        ex.$type !== `${prefix}:FieldsPermission` &&
+        ex.$type !== `${prefix}:ApproveType` &&
+        ex.$type !== `${prefix}:SignEnable` &&
+        ex.$type !== `${prefix}:ReasonRequire`
+    ) ?? []
   const extensions = bpmnInstances().moddle.create('bpmn:ExtensionElements', {
     values: [
-      ...otherExtensions.value,
+      ...currentExtensions,
       assignStartUserHandlerTypeEl.value,
       rejectHandlerTypeEl.value,
       returnNodeIdEl.value,
@@ -437,6 +451,7 @@ const updateElementExtensions = () => {
   bpmnInstances().modeling.updateProperties(toRaw(bpmnElement.value), {
     extensionElements: extensions
   })
+  otherExtensions.value = currentExtensions
 }
 
 watch(

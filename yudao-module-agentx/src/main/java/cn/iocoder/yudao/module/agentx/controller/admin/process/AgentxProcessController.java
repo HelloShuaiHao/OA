@@ -12,8 +12,13 @@ import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxProcessS
 import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxProcessSelectionRespVO;
 import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxProcessStartReqVO;
 import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxProcessStartRespVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxBpmnGenerateReqVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxBpmnGenerateRespVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxBpmnPreviewReqVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.process.vo.AgentxBpmnPreviewRespVO;
 import cn.iocoder.yudao.module.agentx.service.process.AgentxProcessExecutionService;
 import cn.iocoder.yudao.module.agentx.service.process.AgentxProcessSelectionService;
+import cn.iocoder.yudao.module.agentx.service.process.AgentxBpmnGenerationService;
 import cn.iocoder.yudao.module.bpm.dal.dataobject.definition.BpmCategoryDO;
 import cn.iocoder.yudao.module.bpm.framework.flowable.core.util.BpmnModelUtils;
 import cn.iocoder.yudao.module.bpm.framework.flowable.core.util.FlowableUtils;
@@ -60,6 +65,8 @@ public class AgentxProcessController {
     private AgentxProcessSelectionService processSelectionService;
     @Resource
     private AgentxProcessExecutionService processExecutionService;
+    @Resource
+    private AgentxBpmnGenerationService bpmnGenerationService;
 
     @GetMapping("/definition-page")
     @Operation(summary = "获得可选流程定义分页（最新版本）")
@@ -165,6 +172,20 @@ public class AgentxProcessController {
         AgentxProcessStartRespVO respVO = new AgentxProcessStartRespVO();
         respVO.setProcessInstanceId(processInstanceId);
         return success(respVO);
+    }
+
+    @PostMapping("/bpmn/generate")
+    @Operation(summary = "AI 生成 BPMN（最小可联调版本）")
+    @PreAuthorize("@ss.hasPermission('agentx:scenario:update')")
+    public CommonResult<AgentxBpmnGenerateRespVO> generateBpmn(@Valid @RequestBody AgentxBpmnGenerateReqVO reqVO) {
+        return success(bpmnGenerationService.generate(reqVO));
+    }
+
+    @PostMapping("/bpmn/preview")
+    @Operation(summary = "预览并校验 BPMN XML")
+    @PreAuthorize("@ss.hasPermission('agentx:scenario:query')")
+    public CommonResult<AgentxBpmnPreviewRespVO> previewBpmn(@Valid @RequestBody AgentxBpmnPreviewReqVO reqVO) {
+        return success(bpmnGenerationService.preview(reqVO.getBpmnXml()));
     }
 
 }

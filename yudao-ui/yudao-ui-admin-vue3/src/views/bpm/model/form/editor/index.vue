@@ -12,6 +12,7 @@
       :additionalModel="controlForm.additionalModel"
       :model="model"
       @save="save"
+      @element-click="handleElementClick"
       :process-id="modelKey"
       :process-name="modelName"
     />
@@ -19,6 +20,7 @@
     <MyProcessPenal
       v-if="modeler"
       key="penal"
+      ref="processPenal"
       :bpmnModeler="modeler"
       :prefix="controlForm.prefix"
       class="process-panel"
@@ -63,6 +65,7 @@ const modelData = inject('modelData') as Ref
 
 const modeler = shallowRef() // BPMN Modeler
 const processDesigner = ref()
+const processPenal = ref()
 const controlForm = ref({
   simulation: true,
   labelEditing: false,
@@ -78,6 +81,16 @@ const initModeler = async (item: any) => {
   // 先初始化模型数据
   model.value = modelData.value
   modeler.value = item
+}
+
+/** 点击流程节点时，显式同步选中态，确保属性面板切换到对应节点 */
+const handleElementClick = (element: any) => {
+  if (!element || !modeler.value) {
+    return
+  }
+  const selection = modeler.value.get('selection')
+  selection?.select(element)
+  processPenal.value?.setActiveElement?.(element)
 }
 
 /** 添加/修改模型 */

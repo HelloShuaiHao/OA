@@ -223,6 +223,7 @@ const initFormOnChanged = (element) => {
   let activatedElement = element
   if (!activatedElement) {
     activatedElement =
+      bpmnInstances().elementRegistry.find((el) => el.type === 'bpmn:UserTask') ??
       bpmnInstances().elementRegistry.find((el) => el.type === 'bpmn:Process') ??
       bpmnInstances().elementRegistry.find((el) => el.type === 'bpmn:Collaboration')
   }
@@ -253,6 +254,12 @@ const initFormOnChanged = (element) => {
   }
 }
 
+defineExpose({
+  setActiveElement: (element) => {
+    initFormOnChanged(element)
+  }
+})
+
 onBeforeUnmount(() => {
   const w = window as any
   w.bpmnInstances = null
@@ -262,7 +269,7 @@ onBeforeUnmount(() => {
 watch(
   () => elementId.value,
   () => {
-    activeTab.value = 'base'
+    activeTab.value = elementType.value === 'UserTask' ? 'task' : 'base'
   }
 )
 
