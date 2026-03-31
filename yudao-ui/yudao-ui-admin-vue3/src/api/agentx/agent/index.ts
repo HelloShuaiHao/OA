@@ -40,6 +40,9 @@ export interface AgentVO {
   selectionRules?: AgentSelectionRuleItemVO[]
   createTime?: string
   updateTime?: string
+  lastSyncStatus?: number
+  lastSyncTime?: string | number
+  lastSyncMessage?: string
 }
 
 export interface AgentPageReqVO extends PageParam {

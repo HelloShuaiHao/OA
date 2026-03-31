@@ -17,7 +17,11 @@
     <el-card v-if="activeStep === 0" shadow="never">
       <el-form ref="basicFormRef" :model="formData.basic" :rules="basicRules" label-width="110px">
         <el-form-item label="员工名称" prop="agentName">
-          <el-input v-model="formData.basic.agentName" placeholder="例如：请假审批助手" />
+          <el-input
+            v-model="formData.basic.agentName"
+            placeholder="例如：请假审批助手"
+            @blur="handleAgentNameBlur"
+          />
         </el-form-item>
         <el-form-item label="员工描述" prop="description">
           <el-input v-model="formData.basic.description" type="textarea" :rows="3" />
@@ -116,6 +120,9 @@
 
   <ContentWrap>
     <div class="footer-actions">
+      <span v-if="activeStep === 4 && !isEdit" class="publish-tip">
+        保存草稿仅保存到 OA；点击“激活并发布”后才会同步到 OpenFang 并可用于渠道接入。
+      </span>
       <el-button @click="goBack">取消</el-button>
       <el-button :disabled="activeStep === 0 || submitLoading" @click="prevStep">上一步</el-button>
       <el-button v-if="activeStep < 4" type="primary" :disabled="nextStepDisabled" @click="nextStep">下一步</el-button>
@@ -158,6 +165,8 @@ const basicFormRef = ref()
 const deptOptions = ref<DeptApi.DeptVO[]>([])
 const isEdit = computed(() => !!route.query.id)
 const checkingName = ref(false)
+const lastCheckedAgentName = ref('')
+const lastCheckedAvailable = ref<boolean | null>(null)
 
 const templateMetaMap: Record<string, { name: string; description: string; icon: string }> = {
   leave: { name: '请假审批助手', description: '处理请假流程与审批路由', icon: 'ep:calendar' },
@@ -240,6 +249,29 @@ const formData = reactive({
   }
 })
 
+const checkAgentNameRemote = async (agentName: string) => {
+  if (lastCheckedAgentName.value === agentName && lastCheckedAvailable.value !== null) {
+    return lastCheckedAvailable.value
+  }
+  checkingName.value = true
+  try {
+    const available = await AgentApi.checkAgentName(agentName, isEdit.value ? Number(route.query.id) : undefined)
+    lastCheckedAgentName.value = agentName
+    lastCheckedAvailable.value = available
+    return available
+  } finally {
+    checkingName.value = false
+  }
+}
+
+const handleAgentNameBlur = async () => {
+  const agentName = formData.basic.agentName.trim()
+  if (!agentName || agentName.length < 2 || agentName.length > 50) {
+    return
+  }
+  await checkAgentNameRemote(agentName)
+}
+
 const basicRules = reactive({
   agentName: [
     { required: true, message: '请输入员工名称', trigger: 'blur' },
@@ -251,9 +283,8 @@ const basicRules = reactive({
           callback()
           return
         }
-        checkingName.value = true
         try {
-          const available = await AgentApi.checkAgentName(agentName, isEdit.value ? Number(route.query.id) : undefined)
+          const available = await checkAgentNameRemote(agentName)
           if (!available) {
             callback(new Error('名称已存在'))
             return
@@ -261,8 +292,6 @@ const basicRules = reactive({
           callback()
         } catch {
           callback(new Error('名称校验失败，请稍后重试'))
-        } finally {
-          checkingName.value = false
         }
       },
       trigger: 'blur'
@@ -409,12 +438,32 @@ const buildPayload = (): AgentApi.AgentVO => {
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+const waitForAgentReady = async (id: number, options?: { requireSync?: boolean }) => {
+  const expectedProcessCount = formData.processConfig.selectedProcesses.length
+  const expectedCapabilityCount = formData.capabilityKeys.length
+
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const detail = await AgentApi.getAgent(id)
+    const processReady = (detail.processes?.length || 0) >= expectedProcessCount
+    const capabilityReady = (detail.capabilities?.length || 0) >= expectedCapabilityCount
+    const syncReady = !options?.requireSync || detail.lastSyncStatus === 1 || detail.lastSyncStatus === 2
+    const statusReady = !options?.requireSync || detail.status === 1
+    if (processReady && capabilityReady && syncReady && statusReady) {
+      return
+    }
+    await sleep(300)
+  }
+}
+
 const submitDraft = async () => {
   submitLoading.value = true
   try {
-    await AgentApi.createAgentDraft(buildPayload())
+    const id = await AgentApi.createAgentDraft(buildPayload())
+    await waitForAgentReady(id)
     message.success('草稿保存成功')
-    router.push('/agentx/agent/list')
+    router.push(`/agentx/agent/detail/${id}`)
   } finally {
     submitLoading.value = false
   }
@@ -424,6 +473,7 @@ const submitActivate = async () => {
   submitLoading.value = true
   try {
     const id = await AgentApi.createAgentPublish(buildPayload())
+    await waitForAgentReady(id, { requireSync: true })
     message.success('数字员工已激活')
     router.push(`/agentx/agent/detail/${id}`)
   } finally {
@@ -469,8 +519,16 @@ onMounted(async () => {
 <style scoped>
 .footer-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.publish-tip {
+  margin-right: auto;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .template-grid {

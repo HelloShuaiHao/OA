@@ -450,9 +450,13 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
             return null;
         }
         String expectedName = buildOpenfangAgentName(agent);
+        String legacyName = buildLegacyOpenfangAgentName(agent);
         return data.stream()
                 .filter(Objects::nonNull)
-                .filter(item -> StrUtil.equals(expectedName, (String) item.get("name")))
+                .filter(item -> {
+                    String name = (String) item.get("name");
+                    return StrUtil.equals(expectedName, name) || StrUtil.equals(legacyName, name);
+                })
                 .map(item -> (String) item.get("id"))
                 .filter(StrUtil::isNotBlank)
                 .findFirst()
@@ -503,10 +507,16 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
     }
 
     private String buildOpenfangAgentName(AgentxAgentDO agent) {
+        String displayName = StrUtil.blankToDefault(agent.getAgentName(), "OA 数字员工");
+        return displayName + " [OA#" + agent.getId() + "]";
+    }
+
+    private String buildLegacyOpenfangAgentName(AgentxAgentDO agent) {
         return "oa-agent-" + StrUtil.subPre(agent.getAgentKey(), 24);
     }
 
     private String buildOpenfangManifest(AgentxAgentDO agent, List<AgentxAgentCapabilityDO> capabilities) {
+        OpenfangModelConfig modelConfig = fetchOpenfangDefaultModelConfig();
         StringBuilder builder = new StringBuilder();
         builder.append("name = \"").append(tomlEscape(buildOpenfangAgentName(agent))).append("\"\n");
         builder.append("version = \"0.1.0\"\n");
@@ -514,8 +524,8 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
         builder.append("author = \"agentx\"\n");
         builder.append("module = \"builtin:chat\"\n\n");
         builder.append("[model]\n");
-        builder.append("provider = \"openai\"\n");
-        builder.append("model = \"gpt-4o-mini\"\n");
+        builder.append("provider = \"").append(tomlEscape(modelConfig.getProvider())).append("\"\n");
+        builder.append("model = \"").append(tomlEscape(modelConfig.getModel())).append("\"\n");
         builder.append("system_prompt = \"").append(tomlEscape(buildOpenfangSystemPrompt(agent, capabilities))).append("\"\n\n");
         builder.append("[capabilities]\n");
         builder.append("tools = []\n");
@@ -549,6 +559,48 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
                 StrUtil.blankToDefault(agent.getTemplateType(), "custom"),
                 capabilityCount,
                 processCount);
+    }
+
+    @SuppressWarnings("unchecked")
+    private OpenfangModelConfig fetchOpenfangDefaultModelConfig() {
+        List<AgentxOpenfangInstanceDO> instances = openfangInstanceMapper.selectListByStatus(1);
+        if (CollUtil.isEmpty(instances)) {
+            return OpenfangModelConfig.fallback();
+        }
+        AgentxOpenfangInstanceDO instance = instances.get(0);
+        String baseUrl = StrUtil.removeSuffix(instance.getEndpoint(), "/");
+        try {
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    baseUrl + "/api/config",
+                    HttpMethod.GET,
+                    new HttpEntity<>(buildOpenfangHeaders(instance)),
+                    new ParameterizedTypeReference<Map<String, Object>>() {
+                    });
+            Map<String, Object> body = response.getBody();
+            if (body == null) {
+                return OpenfangModelConfig.fallback();
+            }
+            Object defaultModel = body.get("default_model");
+            if (!(defaultModel instanceof Map<?, ?>)) {
+                return OpenfangModelConfig.fallback();
+            }
+            Map<String, Object> model = (Map<String, Object>) defaultModel;
+            String provider = StrUtil.blankToDefault((String) model.get("provider"), OpenfangModelConfig.DEFAULT_PROVIDER);
+            String modelName = StrUtil.blankToDefault((String) model.get("model"), OpenfangModelConfig.DEFAULT_MODEL);
+            return new OpenfangModelConfig(provider, modelName);
+        } catch (Exception ex) {
+            return OpenfangModelConfig.fallback();
+        }
+    }
+
+    private HttpHeaders buildOpenfangHeaders(AgentxOpenfangInstanceDO instance) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        String apiKey = openfangApiKeyCrypto.decrypt(instance.getApiKeyEncrypted());
+        if (StrUtil.isNotBlank(apiKey)) {
+            headers.setBearerAuth(apiKey);
+        }
+        return headers;
     }
 
     private String tomlEscape(String value) {
@@ -601,6 +653,31 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
 
         public LocalDateTime getSyncTime() {
             return syncTime;
+        }
+    }
+
+    private static class OpenfangModelConfig {
+        private static final String DEFAULT_PROVIDER = "openai";
+        private static final String DEFAULT_MODEL = "gpt-4o-mini";
+
+        private final String provider;
+        private final String model;
+
+        private OpenfangModelConfig(String provider, String model) {
+            this.provider = provider;
+            this.model = model;
+        }
+
+        public static OpenfangModelConfig fallback() {
+            return new OpenfangModelConfig(DEFAULT_PROVIDER, DEFAULT_MODEL);
+        }
+
+        public String getProvider() {
+            return provider;
+        }
+
+        public String getModel() {
+            return model;
         }
     }
 

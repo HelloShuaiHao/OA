@@ -37,7 +37,7 @@
               <span>Key: {{ item.key }}</span>
               <span>版本: {{ item.version }}</span>
               <span>分类: {{ item.categoryName || '-' }}</span>
-              <span>创建时间: {{ item.deploymentTime ? formatDateTime(item.deploymentTime) : '-' }}</span>
+              <span>创建时间: {{ formatDeploymentTime(item.deploymentTime) }}</span>
             </div>
           </div>
           <el-button link type="primary" @click.stop="openPreview(item)">查看流程图</el-button>
@@ -75,6 +75,7 @@
 <script setup lang="ts">
 import { MyProcessViewer } from '@/components/bpmnProcessDesigner/package'
 import * as ProcessApi from '@/api/agentx/process'
+import { formatDate as formatDateValue } from '@/utils/formatTime'
 
 interface StepProcessModel {
   selectedProcesses: ProcessApi.AgentxProcessDefinitionVO[]
@@ -117,6 +118,10 @@ const selectedProcesses = computed(() =>
     .map((id) => selectedProcessMap.value[id])
     .filter((item): item is ProcessApi.AgentxProcessDefinitionVO => !!item)
 )
+
+const formatDeploymentTime = (value?: string | number) => {
+  return value ? formatDateValue(new Date(value)) : '-'
+}
 
 const syncModelValue = () => {
   emit('update:modelValue', {

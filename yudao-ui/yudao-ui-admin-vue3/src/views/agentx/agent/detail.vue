@@ -15,7 +15,25 @@
       <el-descriptions-item label="最后更新时间">{{ formatDate(detail?.updateTime) }}</el-descriptions-item>
       <el-descriptions-item label="创建人">{{ detail?.creator || '-' }}</el-descriptions-item>
       <el-descriptions-item label="更新人">{{ detail?.updater || '-' }}</el-descriptions-item>
+      <el-descriptions-item label="OpenFang 同步状态">
+        <el-tag :type="syncStatusType(detail?.lastSyncStatus)">
+          {{ syncStatusLabel(detail?.lastSyncStatus) }}
+        </el-tag>
+      </el-descriptions-item>
+      <el-descriptions-item label="最近同步时间">{{ formatDate(detail?.lastSyncTime) }}</el-descriptions-item>
+      <el-descriptions-item label="同步说明" :span="2">
+        {{ detail?.lastSyncMessage || (detail?.status === 0 ? '草稿未同步，激活后会自动同步 OpenFang' : '-') }}
+      </el-descriptions-item>
     </el-descriptions>
+  </ContentWrap>
+
+  <ContentWrap v-if="detail?.status === 0">
+    <el-alert
+      type="info"
+      show-icon
+      :closable="false"
+      title="当前为草稿状态：仅保存在 OA，尚未同步 OpenFang。点击“启用”后会自动同步。"
+    />
   </ContentWrap>
 
   <ContentWrap>
@@ -95,6 +113,7 @@
 <script setup lang="ts">
 import * as AgentApi from '@/api/agentx/agent'
 import * as DeptApi from '@/api/system/dept'
+import { formatDate as formatDateValue } from '@/utils/formatTime'
 
 defineOptions({ name: 'AgentxAgentDetail' })
 
@@ -121,8 +140,40 @@ const statusLabel = (status?: number) => {
   return '草稿'
 }
 
-const formatDate = (value?: string) => {
-  return value ? formatDateTime(value) : '-'
+const formatDate = (value?: string | number) => {
+  return value ? formatDateValue(new Date(value)) : '-'
+}
+
+const syncStatusLabel = (status?: number) => {
+  if (status === 1) return '成功'
+  if (status === 2) return '失败'
+  return '未同步'
+}
+
+const syncStatusType = (status?: number) => {
+  if (status === 1) return 'success'
+  if (status === 2) return 'danger'
+  return 'info'
+}
+
+const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
+
+const shouldRefreshDetail = (value?: AgentApi.AgentVO) => {
+  if (!value || value.status !== 1) {
+    return false
+  }
+  const syncPending = value.lastSyncStatus !== 1 && value.lastSyncStatus !== 2
+  const relationsPending = (value.processes?.length || 0) === 0 && (value.capabilities?.length || 0) === 0
+  return syncPending || relationsPending
+}
+
+const loadStableDetail = async (id: number) => {
+  let latest = await AgentApi.getAgent(id)
+  for (let attempt = 0; attempt < 10 && shouldRefreshDetail(latest); attempt++) {
+    await sleep(300)
+    latest = await AgentApi.getAgent(id)
+  }
+  return latest
 }
 
 const getDetail = async () => {
@@ -130,7 +181,7 @@ const getDetail = async () => {
   if (!id) return
   loading.value = true
   try {
-    detail.value = await AgentApi.getAgent(id)
+    detail.value = await loadStableDetail(id)
     if (detail.value?.deptId) {
       deptMembers.value = await DeptApi.getDeptMembers(detail.value.deptId, 'all')
     } else {
