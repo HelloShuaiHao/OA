@@ -44,6 +44,7 @@ class AgentxToolInvocationServiceTest {
                         .setScenarioCode("oa.leave.approval")
                         .setBusinessKey("leave:1")
                         .setTaskRunId("tr-1")
+                        .setAllowedActions(List.of("bpm.task.approve"))
                         .setDataScope(new AgentxDataScope().setTenantId(1L).setBusinessKeys(List.of("leave:1"))),
                 new ExecutionIdentity()
                         .setPrincipalId("u-1")
@@ -89,6 +90,7 @@ class AgentxToolInvocationServiceTest {
                         .setScenarioCode("oa.leave.approval")
                         .setBusinessKey("leave:2")
                         .setTaskRunId("tr-2")
+                        .setAllowedActions(List.of("bpm.task.read"))
                         .setDataScope(new AgentxDataScope().setTenantId(1L).setBusinessKeys(List.of("leave:2"))),
                 new ExecutionIdentity()
                         .setPrincipalId("u-1")

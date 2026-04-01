@@ -26,6 +26,7 @@
           <el-form-item label="渠道类型" prop="channelType">
             <el-select v-model="queryParams.channelType" clearable placeholder="请选择类型" style="width: 160px">
               <el-option label="Telegram" value="telegram" />
+              <el-option label="WhatsApp" value="whatsapp" />
               <el-option label="企业微信" value="wecom" />
               <el-option label="钉钉" value="dingtalk" />
             </el-select>
@@ -112,6 +113,7 @@ const queryParams = reactive({
 
 const channelLabel = (channelType: string) => {
   if (channelType === 'telegram') return 'Telegram'
+  if (channelType === 'whatsapp') return 'WhatsApp'
   if (channelType === 'wecom') return '企业微信'
   if (channelType === 'dingtalk') return '钉钉'
   return channelType

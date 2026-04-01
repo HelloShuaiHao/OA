@@ -35,6 +35,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 @EnableConfigurationProperties({
         AgentxOpenfangProperties.class,
         AgentxBindProperties.class,
+        AgentxEntitlementProperties.class,
         AgentxRoleResolverProperties.class,
         AgentxMqProperties.class
 })

@@ -1,14 +1,18 @@
 package cn.iocoder.yudao.module.agentx.service.tool;
 
+import cn.hutool.core.collection.CollUtil;
 import cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil;
 import cn.iocoder.yudao.module.agentx.service.audit.AgentxAuditService;
 import cn.iocoder.yudao.module.agentx.service.authorization.AgentxAuthorizationService;
 import cn.iocoder.yudao.module.agentx.service.identity.ExecutionIdentity;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.module.agentx.enums.ErrorCodeConstants.DATA_SCOPE_DENIED;
+import static cn.iocoder.yudao.module.agentx.enums.ErrorCodeConstants.TOOL_ACTION_DENIED;
 import static cn.iocoder.yudao.module.agentx.enums.ErrorCodeConstants.TOOL_REQUEST_INVALID;
 
 /**
@@ -37,6 +41,15 @@ public class AgentxToolGuardService {
                     && !identity.getTenantId().equals(request.getDataScope().getTenantId())) {
                 throw ServiceExceptionUtil.exception(DATA_SCOPE_DENIED, identity.getTenantId(), request.getDataScope().getTenantId());
             }
+            if (CollUtil.isNotEmpty(request.getRequiredActions())) {
+                List<String> missingActions = request.getRequiredActions().stream()
+                        .filter(requiredAction -> request.getAllowedActions() == null
+                                || !request.getAllowedActions().contains(requiredAction))
+                        .collect(Collectors.toList());
+                if (CollUtil.isNotEmpty(missingActions)) {
+                    throw ServiceExceptionUtil.exception(TOOL_ACTION_DENIED, String.join(",", missingActions));
+                }
+            }
             boolean approvalRequired = Boolean.TRUE.equals(request.getApprovalRequired())
                     || (request.getRiskLevel() != null && request.getRiskLevel() >= 30);
             if (auditService != null) {
@@ -62,6 +75,7 @@ public class AgentxToolGuardService {
         request.setToolName(descriptor.getToolName());
         if (descriptor.getPolicy() != null) {
             request.setRequiredCapability(descriptor.getPolicy().getRequiredCapability());
+            request.setRequiredActions(descriptor.getPolicy().getRequiredActions());
             request.setRiskLevel(descriptor.getPolicy().getRiskLevel());
             request.setApprovalRequired(descriptor.getPolicy().getApprovalRequired());
         }

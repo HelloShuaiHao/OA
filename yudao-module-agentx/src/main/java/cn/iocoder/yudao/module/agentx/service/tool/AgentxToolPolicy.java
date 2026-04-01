@@ -14,6 +14,10 @@ import java.util.List;
 public class AgentxToolPolicy {
 
     private AgentxCapability requiredCapability;
+    /**
+     * 新增的业务 action 约束，要求调用方在 System-Enforced Context 中具备全部 requiredActions。
+     */
+    private List<String> requiredActions;
     private Integer riskLevel;
     private Boolean approvalRequired;
     private List<String> auditTags;

@@ -238,6 +238,10 @@ yudao:
     bind:
       # 绑定链接统一指向管理台路由页，避免误指向 /admin-api 服务
       base-url: ${yudao.web.admin-ui.url}
+    entitlement:
+      signature-secret: ${AGENTX_SIGNATURE_SECRET:change-me-in-prod}
+      policy-version: v2026.04.01
+      envelope-ttl-minutes: 5
     openfang:
       base-url: http://127.0.0.1:4201
       protection-enabled: true

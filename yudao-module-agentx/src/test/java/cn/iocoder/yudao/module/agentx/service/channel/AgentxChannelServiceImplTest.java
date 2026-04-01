@@ -4,6 +4,10 @@ import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
 import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxBindGenerateRespVO;
 import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxChannelAccessEvaluateReqVO;
 import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxChannelAccessEvaluateRespVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxChannelConfigSaveReqVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxChannelTestReqVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxChannelTestRespVO;
+import cn.iocoder.yudao.module.agentx.controller.admin.channel.vo.AgentxWhatsAppQrStatusRespVO;
 import cn.iocoder.yudao.module.agentx.dal.dataobject.agent.AgentxAgentDO;
 import cn.iocoder.yudao.module.agentx.dal.dataobject.channel.AgentxChannelAgentDO;
 import cn.iocoder.yudao.module.agentx.dal.dataobject.channel.AgentxChannelConfigDO;
@@ -24,8 +28,10 @@ import org.mockito.Mockito;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -49,6 +55,43 @@ class AgentxChannelServiceImplTest {
     private final AgentxMetricsService metricsService = Mockito.mock(AgentxMetricsService.class);
     private final AgentxBindService bindService = Mockito.mock(AgentxBindService.class);
     private final AdminUserService adminUserService = Mockito.mock(AdminUserService.class);
+
+    @Test
+    void shouldPersistEmptyBotTokenForWhatsAppCreate() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/configure"),
+                eq(HttpMethod.POST),
+                any(HttpEntity.class),
+                eq(Object.class)))
+                .thenReturn(ResponseEntity.ok().build());
+
+        AgentxChannelConfigSaveReqVO reqVO = new AgentxChannelConfigSaveReqVO();
+        reqVO.setChannelType("whatsapp");
+        reqVO.setChannelName("WA test");
+        reqVO.setBotToken(null);
+        reqVO.setAgentIds(List.of(1L));
+        reqVO.setAccessControlType("all");
+        reqVO.setDeptIds(List.of());
+        reqVO.setUserIds(List.of());
+        reqVO.setAgentAccessPolicies(List.of());
+        reqVO.setStatus(0);
+
+        Mockito.doAnswer(invocation -> {
+            AgentxChannelConfigDO inserted = invocation.getArgument(0);
+            inserted.setId(101L);
+            return 1;
+        }).when(channelConfigMapper).insert(any(AgentxChannelConfigDO.class));
+
+        service.createChannelConfig(reqVO);
+
+        ArgumentCaptor<AgentxChannelConfigDO> captor = ArgumentCaptor.forClass(AgentxChannelConfigDO.class);
+        verify(channelConfigMapper).insert(captor.capture());
+        assertEquals("", captor.getValue().getBotTokenEncrypted());
+    }
 
     @Test
     void shouldAllowAnonymousAccessForPublicAgent() {
@@ -201,6 +244,119 @@ class AgentxChannelServiceImplTest {
         @SuppressWarnings("unchecked")
         List<Long> allowedUsers = (List<Long>) ((java.util.Map<String, Object>) body).get("allowed_users");
         Assertions.assertEquals(List.of(-1L), allowedUsers);
+    }
+
+    @Test
+    void shouldTestWhatsappConnectionThroughOpenfangQrApi() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+
+        String endpoint = "https://openfang.company.com/api/channels/whatsapp/qr/start";
+        when(restTemplate.exchange(eq(endpoint), eq(HttpMethod.POST), any(HttpEntity.class), eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("available", true, "connected", false)));
+
+        AgentxChannelTestReqVO reqVO = new AgentxChannelTestReqVO();
+        reqVO.setChannelType("whatsapp");
+        AgentxChannelTestRespVO respVO = service.testChannelConnection(reqVO);
+
+        assertTrue(respVO.getSuccess());
+    }
+
+    @Test
+    void shouldDeleteWhatsAppBindingWhenDeletingChannelConfig() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxChannelConfigDO channel = new AgentxChannelConfigDO();
+        channel.setId(8L);
+        channel.setChannelType("whatsapp");
+        when(channelConfigMapper.selectById(8L)).thenReturn(channel);
+
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/bindings/agentx-channel-8"),
+                eq(HttpMethod.DELETE),
+                any(HttpEntity.class),
+                eq(Object.class)))
+                .thenReturn(ResponseEntity.ok().build());
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/bindings"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of("bindings", List.of())));
+
+        service.deleteChannelConfig(8L);
+
+        verify(restTemplate).exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/bindings/agentx-channel-8"),
+                eq(HttpMethod.DELETE),
+                any(HttpEntity.class),
+                eq(Object.class));
+        verify(channelConfigMapper).deleteById(8L);
+        verify(channelAgentMapper).deleteByChannelId(8L);
+    }
+
+    @Test
+    void shouldFallbackToRuntimeBindingStatusWhenSessionLostAfterRestart() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/qr/status?session_id=session-1&binding_id=agentx-channel-12"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Map.class)))
+                .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", null, null, null));
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/bindings/agentx-channel-12"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of(
+                        "binding_id", "agentx-channel-12",
+                        "connected", true,
+                        "session_id", "restored-session"))));
+
+        AgentxWhatsAppQrStatusRespVO respVO = service.getWhatsAppQrStatus("session-1", 12L);
+
+        assertTrue(respVO.getConnected());
+        assertEquals("restored-session", respVO.getSessionId());
+        assertEquals("WhatsApp 已连接", respVO.getMessage());
+    }
+
+    @Test
+    void shouldReadRuntimeBindingStatusByChannelIdWithoutSessionId() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/bindings/agentx-channel-12"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Map.class)))
+                .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", null, null, null));
+        when(restTemplate.exchange(
+                eq("https://openfang.company.com/api/channels/whatsapp/bindings"),
+                eq(HttpMethod.GET),
+                any(HttpEntity.class),
+                eq(Map.class)))
+                .thenReturn(ResponseEntity.ok(Map.of(
+                        "bindings", List.of(Map.of(
+                                "binding_id", "agentx-channel-12",
+                                "session_id", "runtime-session")))));
+
+        AgentxWhatsAppQrStatusRespVO respVO = service.getWhatsAppQrStatus(null, 12L);
+
+        assertTrue(respVO.getConnected());
+        assertEquals("runtime-session", respVO.getSessionId());
+        assertEquals("WhatsApp 已连接", respVO.getMessage());
     }
 
     private AgentxChannelServiceImpl buildService() {

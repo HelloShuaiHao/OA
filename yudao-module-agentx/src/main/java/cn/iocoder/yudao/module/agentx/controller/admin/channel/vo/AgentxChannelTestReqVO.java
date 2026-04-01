@@ -12,7 +12,7 @@ public class AgentxChannelTestReqVO {
     @Schema(description = "渠道配置 ID（可选）")
     private Long channelId;
 
-    @Schema(description = "渠道类型（telegram/wecom/dingtalk）", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "渠道类型（telegram/whatsapp/wecom/dingtalk）", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "渠道类型不能为空")
     private String channelType;
 

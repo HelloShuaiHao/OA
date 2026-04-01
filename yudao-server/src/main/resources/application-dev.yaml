@@ -171,6 +171,10 @@ wx: # 参见 https://github.com/Wechat-Group/WxJava/blob/develop/spring-boot-sta
 # 芋道配置项，设置当前项目所有自定义的配置
 yudao:
   agentx:
+    entitlement:
+      signature-secret: ${AGENTX_SIGNATURE_SECRET:change-me-in-prod}
+      policy-version: v2026.04.01
+      envelope-ttl-minutes: 5
     openfang:
       protection-enabled: true
       circuit-failure-threshold: 3

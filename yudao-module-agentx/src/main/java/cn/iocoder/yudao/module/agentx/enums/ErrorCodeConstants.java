@@ -17,6 +17,7 @@ public interface ErrorCodeConstants {
     ErrorCode DATA_SCOPE_DENIED = new ErrorCode(1_024_001_006, "数据域越权，当前租户({})不能访问目标租户({})");
     ErrorCode TOOL_REQUEST_INVALID = new ErrorCode(1_024_001_007, "Tool 调用请求不合法，缺少必要字段");
     ErrorCode TOOL_ADAPTER_NOT_EXISTS = new ErrorCode(1_024_001_008, "Tool({})未注册适配器");
+    ErrorCode TOOL_ACTION_DENIED = new ErrorCode(1_024_001_009, "Tool 调用被拒绝，缺少 action({})");
 
     ErrorCode OPENFANG_INSTANCE_NOT_EXISTS = new ErrorCode(1_024_002_001, "OpenFang 实例不存在");
     ErrorCode OPENFANG_INSTANCE_NAME_DUPLICATED = new ErrorCode(1_024_002_002, "OpenFang 实例名称已存在");
@@ -46,5 +47,8 @@ public interface ErrorCodeConstants {
     ErrorCode CHANNEL_BIND_TOKEN_INVALID = new ErrorCode(1_024_006_001, "绑定 Token 无效");
     ErrorCode CHANNEL_BIND_TOKEN_EXPIRED = new ErrorCode(1_024_006_002, "绑定链接已过期，请重新获取");
     ErrorCode CHANNEL_BIND_ALREADY_EXISTS = new ErrorCode(1_024_006_003, "当前渠道账号已绑定，无需重复操作");
+
+    ErrorCode ENTITLEMENT_CONFIG_NOT_EXISTS = new ErrorCode(1_024_007_001, "权限配置不存在");
+    ErrorCode ENVELOPE_SIGNATURE_INVALID = new ErrorCode(1_024_007_002, "Envelope 签名无效");
 
 }

@@ -25,6 +25,7 @@ public final class BpmApproveToolDescriptor {
                         .setRequiredFields(List.of("approved")))
                 .setPolicy(new AgentxToolPolicy()
                         .setRequiredCapability(AgentxCapability.UPDATE_LEAVE)
+                        .setRequiredActions(List.of("bpm.task.approve"))
                         .setRiskLevel(30)
                         .setApprovalRequired(true)
                         .setAuditTags(List.of("bpm", "approve", "write")));

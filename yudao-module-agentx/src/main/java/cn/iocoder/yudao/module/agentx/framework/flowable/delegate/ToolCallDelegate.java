@@ -5,6 +5,7 @@ import cn.hutool.core.convert.Convert;
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.iocoder.yudao.framework.common.util.json.JsonUtils;
+import cn.iocoder.yudao.module.agentx.service.accessaudit.AgentxAccessAuditService;
 import cn.iocoder.yudao.module.agentx.service.authorization.AgentxAuthorizationService;
 import cn.iocoder.yudao.module.agentx.service.authorization.AgentxCapability;
 import cn.iocoder.yudao.module.agentx.service.identity.ExecutionIdentity;
@@ -36,6 +37,8 @@ public class ToolCallDelegate implements JavaDelegate {
 
     @Autowired(required = false)
     private List<AgentxToolAdapter> toolAdapters = Collections.emptyList();
+    @Autowired(required = false)
+    private AgentxAccessAuditService accessAuditService;
 
     @Override
     @SuppressWarnings("unchecked")
@@ -69,7 +72,23 @@ public class ToolCallDelegate implements JavaDelegate {
         int maxRetries = resolveMaxRetries(execution);
         int attempts = 0;
         try {
-            validatePermission(execution, toolName);
+            PermissionContext permissionContext = validatePermission(execution, toolName);
+            applyResourceFilters(execution, params);
+            if (permissionContext.approvalRequired) {
+                String approvalId = "apr_" + UUID.randomUUID().toString().replace("-", "");
+                execution.setVariable(outputVariable, null);
+                execution.setVariable("toolCallStatus", "PENDING_APPROVAL");
+                execution.setVariable("toolCallMessage", "工具调用命中审批约束，等待审批通过后执行");
+                execution.setVariable("toolCallError", null);
+                execution.setVariable("toolCallAttempts", attempts);
+                execution.setVariable("toolApprovalRequired", true);
+                execution.setVariable("toolApprovalId", approvalId);
+                execution.setVariable("toolApprovalAction", permissionContext.approvalAction);
+                execution.setVariable("toolApprovalRole", permissionContext.approverRole);
+                execution.setVariable("toolApprovalReason", permissionContext.approvalReason);
+                recordToolDecision(execution, "DENY", "approval_required", permissionContext.approvalAction);
+                return;
+            }
             RuntimeException lastException = null;
             for (int i = 0; i <= maxRetries; i++) {
                 attempts++;
@@ -80,6 +99,7 @@ public class ToolCallDelegate implements JavaDelegate {
                     execution.setVariable("toolCallMessage", "工具调用成功");
                     execution.setVariable("toolCallError", null);
                     execution.setVariable("toolCallAttempts", attempts);
+                    recordToolDecision(execution, "ALLOW", null, resolveActionForAudit(execution, toolName));
                     return;
                 } catch (RuntimeException ex) {
                     lastException = ex;
@@ -92,17 +112,19 @@ public class ToolCallDelegate implements JavaDelegate {
             execution.setVariable("toolCallMessage", "工具调用失败，超过最大重试次数");
             execution.setVariable("toolCallError", lastException != null ? lastException.getMessage() : "unknown error");
             execution.setVariable("toolCallAttempts", attempts);
+            recordToolDecision(execution, "DENY", "tool_invoke_failed", resolveActionForAudit(execution, toolName));
         } catch (RuntimeException ex) {
             execution.setVariable(outputVariable, null);
             execution.setVariable("toolCallStatus", "DENIED");
             execution.setVariable("toolCallMessage", "工具调用权限校验失败");
             execution.setVariable("toolCallError", ex.getMessage());
             execution.setVariable("toolCallAttempts", attempts);
+            recordToolDecision(execution, "DENY", "permission_denied", resolveActionForAudit(execution, toolName));
             log.warn("[ToolCallDelegate] permission check failed, toolName={}", toolName, ex);
         }
     }
 
-    private void validatePermission(DelegateExecution execution, String toolName) {
+    private PermissionContext validatePermission(DelegateExecution execution, String toolName) {
         AgentxToolDescriptor descriptor = BUILTIN_DESCRIPTORS.get(toolName);
         AgentxToolInvocationRequest invocation = new AgentxToolInvocationRequest()
                 .setScenarioCode(stringValue(execution.getVariable("scenarioCode")))
@@ -111,6 +133,8 @@ public class ToolCallDelegate implements JavaDelegate {
                         stringValue(execution.getVariable("taskRunId")),
                         stringValue(execution.getVariable("openfangTaskRunId"))))
                 .setDataScope(resolveDataScope(execution))
+                .setAllowedActions(resolveAllowedActions(execution))
+                .setRequiredActions(resolveRequiredActions(execution))
                 .setRequiredCapability(resolveRequiredCapability(execution));
 
         ExecutionIdentity identity = new ExecutionIdentity()
@@ -128,14 +152,25 @@ public class ToolCallDelegate implements JavaDelegate {
         Set<AgentxCapability> scenarioCapabilities = resolveCapabilities(execution.getVariable("scenarioCapabilities"));
 
         AgentxToolGuardService guardService = new AgentxToolGuardService(new AgentxAuthorizationService(), null);
+        AgentxToolGuardResult guardResult;
         if (descriptor != null) {
-            guardService.validateDescriptor(descriptor, invocation, identity, agentCapabilities, scenarioCapabilities);
-            return;
-        }
-        if (invocation.getRequiredCapability() != null) {
+            guardResult = guardService.validateDescriptor(descriptor, invocation, identity, agentCapabilities, scenarioCapabilities);
+        } else if (invocation.getRequiredCapability() != null) {
             invocation.setToolName(toolName);
-            guardService.validate(invocation, identity, agentCapabilities, scenarioCapabilities);
+            guardResult = guardService.validate(invocation, identity, agentCapabilities, scenarioCapabilities);
+        } else {
+            return new PermissionContext(false, null, null, null);
         }
+        ApprovalMatch match = matchApprovalObligation(execution, invocation.getRequiredActions());
+        boolean approvalRequired = (guardResult != null && guardResult.isApprovalRequired()) || match.approvalRequired;
+        if (!approvalRequired) {
+            return new PermissionContext(false, null, null, null);
+        }
+        String approvalAction = match.action;
+        if (StrUtil.isBlank(approvalAction) && CollUtil.isNotEmpty(invocation.getRequiredActions())) {
+            approvalAction = invocation.getRequiredActions().get(0);
+        }
+        return new PermissionContext(true, approvalAction, match.approverRole, match.reason);
     }
 
     @SuppressWarnings("unchecked")
@@ -262,6 +297,72 @@ public class ToolCallDelegate implements JavaDelegate {
         }
     }
 
+    @SuppressWarnings("unchecked")
+    private List<String> resolveAllowedActions(DelegateExecution execution) {
+        Object systemEnforcedContext = execution.getVariable("systemEnforcedContext");
+        if (systemEnforcedContext instanceof Map) {
+            Object actions = ((Map<String, Object>) systemEnforcedContext).get("allowedActions");
+            List<String> parsed = parseStringList(actions);
+            if (CollUtil.isNotEmpty(parsed)) {
+                return parsed;
+            }
+        }
+        List<String> fromVar = parseStringList(execution.getVariable("allowedActions"));
+        if (CollUtil.isNotEmpty(fromVar)) {
+            return fromVar;
+        }
+        return parseStringList(execution.getVariable("entitlementAllowedActions"));
+    }
+
+    private List<String> resolveRequiredActions(DelegateExecution execution) {
+        List<String> fromVar = parseStringList(execution.getVariable("requiredActions"));
+        if (CollUtil.isNotEmpty(fromVar)) {
+            return fromVar;
+        }
+        return parseStringList(execution.getVariable("toolRequiredActions"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> parseStringList(Object raw) {
+        if (raw == null) {
+            return Collections.emptyList();
+        }
+        if (raw instanceof List) {
+            List<String> result = new ArrayList<>();
+            for (Object item : (List<Object>) raw) {
+                if (item != null && StrUtil.isNotBlank(item.toString())) {
+                    result.add(item.toString());
+                }
+            }
+            return result;
+        }
+        if (raw instanceof String) {
+            String text = ((String) raw).trim();
+            if (StrUtil.isBlank(text)) {
+                return Collections.emptyList();
+            }
+            if (StrUtil.startWith(text, "[")) {
+                try {
+                    return JsonUtils.parseArray(text, String.class);
+                } catch (Exception ignore) {
+                    // ignore malformed json
+                }
+            }
+            if (StrUtil.contains(text, ",")) {
+                String[] parts = text.split(",");
+                List<String> result = new ArrayList<>();
+                for (String part : parts) {
+                    if (StrUtil.isNotBlank(part)) {
+                        result.add(part.trim());
+                    }
+                }
+                return result;
+            }
+            return Collections.singletonList(text);
+        }
+        return Collections.emptyList();
+    }
+
     private boolean resolveDelegationActive(DelegateExecution execution) {
         Object raw = execution.getVariable("delegationActive");
         if (raw == null) {
@@ -318,6 +419,174 @@ public class ToolCallDelegate implements JavaDelegate {
             return DEFAULT_MAX_RETRIES;
         }
         return value;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void applyResourceFilters(DelegateExecution execution, Map<String, Object> params) {
+        Map<String, Object> resourceFilters = null;
+        Object systemEnforcedContext = execution.getVariable("systemEnforcedContext");
+        if (systemEnforcedContext instanceof Map) {
+            Object rawFilters = ((Map<String, Object>) systemEnforcedContext).get("resourceFilters");
+            if (rawFilters instanceof Map) {
+                resourceFilters = (Map<String, Object>) rawFilters;
+            }
+        }
+        if (resourceFilters == null) {
+            Object rawFilters = execution.getVariable("resourceFilters");
+            if (rawFilters instanceof Map) {
+                resourceFilters = (Map<String, Object>) rawFilters;
+            }
+        }
+        if (MapUtil.isEmpty(resourceFilters)) {
+            return;
+        }
+        params.put("_system_resource_filters", resourceFilters);
+        overwriteFilter(params, resourceFilters, "region_codes", "_filter_region_codes");
+        overwriteFilter(params, resourceFilters, "warehouse_ids", "_filter_warehouse_ids");
+        overwriteFilter(params, resourceFilters, "route_ids", "_filter_route_ids");
+    }
+
+    private void overwriteFilter(Map<String, Object> params, Map<String, Object> filters,
+                                 String sourceKey, String targetKey) {
+        Object enforced = filters.get(sourceKey);
+        if (enforced == null) {
+            return;
+        }
+        params.put(targetKey, normalizeValue(enforced));
+    }
+
+    @SuppressWarnings("unchecked")
+    private ApprovalMatch matchApprovalObligation(DelegateExecution execution, List<String> requiredActions) {
+        if (CollUtil.isEmpty(requiredActions)) {
+            return ApprovalMatch.none();
+        }
+        Object obligationsRaw = execution.getVariable("obligations");
+        if (obligationsRaw == null) {
+            Object systemEnforcedContext = execution.getVariable("systemEnforcedContext");
+            if (systemEnforcedContext instanceof Map) {
+                obligationsRaw = ((Map<String, Object>) systemEnforcedContext).get("obligations");
+            }
+        }
+        List<Map<String, Object>> obligations = parseObligationList(obligationsRaw);
+        if (CollUtil.isEmpty(obligations)) {
+            return ApprovalMatch.none();
+        }
+        for (Map<String, Object> obligation : obligations) {
+            String action = stringValue(obligation.get("action"));
+            String requires = stringValue(obligation.get("requires"));
+            if (!requiredActions.contains(action) || !StrUtil.equalsIgnoreCase("approval", requires)) {
+                continue;
+            }
+            return new ApprovalMatch(true, action, stringValue(obligation.get("approverRole")),
+                    firstNonBlank(stringValue(obligation.get("reason")), "命中审批约束"));
+        }
+        return ApprovalMatch.none();
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> parseObligationList(Object raw) {
+        if (raw == null) {
+            return Collections.emptyList();
+        }
+        if (raw instanceof List) {
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Object item : (List<Object>) raw) {
+                if (item instanceof Map) {
+                    result.add((Map<String, Object>) item);
+                }
+            }
+            return result;
+        }
+        if (raw instanceof String && StrUtil.isNotBlank((String) raw)) {
+            try {
+                List<Map> parsed = JsonUtils.parseArray((String) raw, Map.class);
+                if (parsed == null) {
+                    return Collections.emptyList();
+                }
+                List<Map<String, Object>> result = new ArrayList<>();
+                for (Map item : parsed) {
+                    if (item != null) {
+                        result.add((Map<String, Object>) item);
+                    }
+                }
+                return result;
+            } catch (Exception ignore) {
+                return Collections.emptyList();
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    private String resolveActionForAudit(DelegateExecution execution, String toolName) {
+        List<String> requiredActions = resolveRequiredActions(execution);
+        return CollUtil.isNotEmpty(requiredActions) ? requiredActions.get(0) : toolName;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void recordToolDecision(DelegateExecution execution, String decision, String denyReason, String action) {
+        if (accessAuditService == null) {
+            return;
+        }
+        Long userId = parseLong(execution.getVariable("userId"));
+        String channelUserId = stringValue(execution.getVariable("channelUserId"));
+        String agentId = stringValue(execution.getVariable("agentId"));
+        String decisionId = stringValue(execution.getVariable("decisionId"));
+        String policyVersion = stringValue(execution.getVariable("policyVersion"));
+        Object systemEnforcedContext = execution.getVariable("systemEnforcedContext");
+        if (systemEnforcedContext instanceof Map) {
+            Map<String, Object> map = (Map<String, Object>) systemEnforcedContext;
+            userId = firstNonNull(parseLong(map.get("userId")), userId);
+            channelUserId = firstNonBlank(stringValue(map.get("channelUserId")), channelUserId);
+            agentId = firstNonBlank(stringValue(map.get("agentId")), agentId);
+            decisionId = firstNonBlank(stringValue(map.get("decisionId")), decisionId);
+            policyVersion = firstNonBlank(stringValue(map.get("policyVersion")), policyVersion);
+        }
+        if (StrUtil.isBlank(decisionId)) {
+            decisionId = "tool-" + UUID.randomUUID().toString().replace("-", "");
+        }
+        accessAuditService.logAccessDecision(decisionId,
+                userId == null ? -1L : userId,
+                StrUtil.blankToDefault(channelUserId, "unknown"),
+                StrUtil.blankToDefault(agentId, "unknown"),
+                stringValue(execution.getVariable("conversationScope")),
+                StrUtil.blankToDefault(action, "tool_call"),
+                null,
+                null,
+                decision,
+                denyReason,
+                policyVersion);
+    }
+
+    private static class PermissionContext {
+        private final boolean approvalRequired;
+        private final String approvalAction;
+        private final String approverRole;
+        private final String approvalReason;
+
+        private PermissionContext(boolean approvalRequired, String approvalAction, String approverRole, String approvalReason) {
+            this.approvalRequired = approvalRequired;
+            this.approvalAction = approvalAction;
+            this.approverRole = approverRole;
+            this.approvalReason = approvalReason;
+        }
+    }
+
+    private static class ApprovalMatch {
+        private final boolean approvalRequired;
+        private final String action;
+        private final String approverRole;
+        private final String reason;
+
+        private ApprovalMatch(boolean approvalRequired, String action, String approverRole, String reason) {
+            this.approvalRequired = approvalRequired;
+            this.action = action;
+            this.approverRole = approverRole;
+            this.reason = reason;
+        }
+
+        private static ApprovalMatch none() {
+            return new ApprovalMatch(false, null, null, null);
+        }
     }
 
     private String firstNonBlank(String... values) {

@@ -135,6 +135,33 @@ class AgentxToolGuardServiceTest {
         assertEquals("TOOL_DENIED", auditEvents.get(0));
     }
 
+    @Test
+    void shouldRejectWhenRequiredActionMissing() {
+        AgentxToolGuardService service = new AgentxToolGuardService(new AgentxAuthorizationService(), null);
+        ExecutionIdentity identity = new ExecutionIdentity()
+                .setPrincipalId("u-1")
+                .setTenantId(1L)
+                .setAgentCode("leave-agent")
+                .setDelegationActive(true)
+                .setDelegatedCapabilities(EnumSet.of(AgentxCapability.READ_LEAVE));
+
+        ServiceException ex = assertThrows(ServiceException.class, () -> service.validate(new AgentxToolInvocationRequest()
+                        .setScenarioCode("oa.leave.approval")
+                        .setBusinessKey("leave:3")
+                        .setTaskRunId("task-run-3")
+                        .setToolName("leave.query")
+                        .setRequiredCapability(AgentxCapability.READ_LEAVE)
+                        .setRequiredActions(List.of("bpm.task.read"))
+                        .setAllowedActions(List.of("bpm.task.approve"))
+                        .setRiskLevel(10)
+                        .setDataScope(new AgentxDataScope().setTenantId(1L).setBusinessKeys(List.of("leave:3"))),
+                identity,
+                EnumSet.of(AgentxCapability.READ_LEAVE),
+                EnumSet.of(AgentxCapability.READ_LEAVE)));
+
+        assertEquals(Integer.valueOf(1_024_001_009), ex.getCode());
+    }
+
     @SuppressWarnings("unchecked")
     private AgentxAuditService proxyAuditService(List<String> sink) {
         return (AgentxAuditService) Proxy.newProxyInstance(

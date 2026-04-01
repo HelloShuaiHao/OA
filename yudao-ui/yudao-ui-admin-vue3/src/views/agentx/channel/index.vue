@@ -4,6 +4,7 @@
       <el-form-item label="渠道类型" prop="channelType">
         <el-select v-model="queryParams.channelType" clearable placeholder="请选择类型" style="width: 160px">
           <el-option label="Telegram" value="telegram" />
+          <el-option label="WhatsApp" value="whatsapp" />
           <el-option label="企业微信" value="wecom" />
           <el-option label="钉钉" value="dingtalk" />
         </el-select>
@@ -51,26 +52,59 @@
   </ContentWrap>
 
   <Dialog v-model="dialogVisible" :title="formData.id ? '编辑渠道' : '新增渠道'" width="680px">
+    <div v-if="isWhatsAppChannel" class="mb-16px">
+      <el-steps :active="waSetupStep - 1" finish-status="success" simple>
+        <el-step title="填写并保存参数" />
+        <el-step title="扫码完成绑定" />
+      </el-steps>
+    </div>
     <el-form ref="formRef" :model="formData" :rules="formRules" label-width="110px">
-      <el-form-item label="渠道类型" prop="channelType">
+      <el-form-item v-if="!isWhatsAppStep2" label="渠道类型" prop="channelType">
         <el-select v-model="formData.channelType" style="width: 100%">
           <el-option label="Telegram" value="telegram" />
+          <el-option label="WhatsApp" value="whatsapp" />
           <el-option label="企业微信" value="wecom" />
           <el-option label="钉钉" value="dingtalk" />
         </el-select>
       </el-form-item>
-      <el-form-item label="渠道名称" prop="channelName">
+      <el-form-item v-if="!isWhatsAppStep2" label="渠道名称" prop="channelName">
         <el-input v-model="formData.channelName" />
       </el-form-item>
-      <el-form-item label="Bot Token" prop="botToken">
+      <el-form-item v-if="!isWhatsAppStep2" :label="tokenLabel" prop="botToken">
         <el-input v-model="formData.botToken" show-password />
+        <div class="mt-8px text-12px text-[var(--el-text-color-secondary)]">
+          {{ tokenHint }}
+        </div>
       </el-form-item>
-      <el-form-item label="关联 Agent" prop="agentIds">
+      <el-form-item v-if="isWhatsAppStep2" label="扫码绑定">
+        <div class="w-full">
+          <div class="mb-10px flex items-center gap-10px">
+            <el-tag v-if="waQrLoading" type="info">二维码加载中</el-tag>
+            <el-tag v-if="waQrConnected" type="success">已连接</el-tag>
+            <el-tag v-else-if="waQrExpired" type="warning">二维码已过期</el-tag>
+            <el-tag v-else-if="waQrSessionId" type="info">等待扫码中</el-tag>
+          </div>
+          <el-alert
+            :title="waQrMessage || '请使用手机 WhatsApp 扫码绑定'"
+            :type="waQrConnected ? 'success' : waQrAvailable ? 'info' : 'warning'"
+            :closable="false"
+            show-icon
+            class="mb-10px"
+          />
+          <div class="flex items-center justify-center rounded border border-[var(--el-border-color)] p-10px">
+            <img v-if="waQrDataUrl" :src="waQrDataUrl" alt="WhatsApp QR" style="width: 220px; height: 220px" />
+            <span v-else class="text-12px text-[var(--el-text-color-secondary)]">
+              {{ waQrHelp || '正在自动生成二维码，请稍候。' }}
+            </span>
+          </div>
+        </div>
+      </el-form-item>
+      <el-form-item v-if="!isWhatsAppStep2" label="关联 Agent" prop="agentIds">
         <el-select v-model="formData.agentIds" multiple filterable clearable style="width: 100%">
           <el-option v-for="item in agentOptions" :key="item.id" :label="item.agentName" :value="item.id!" />
         </el-select>
       </el-form-item>
-      <el-form-item label="访问控制" prop="accessControlType">
+      <el-form-item v-if="!isWhatsAppStep2" label="访问控制" prop="accessControlType">
         <el-radio-group v-model="formData.accessControlType">
           <el-radio v-for="item in accessControlOptions" :key="item.value" :label="item.value">
             {{ item.label }}
@@ -80,12 +114,12 @@
           {{ accessControlHint }}
         </div>
       </el-form-item>
-      <el-form-item v-if="formData.accessControlType === 'dept'" label="部门" prop="deptIds">
+      <el-form-item v-if="!isWhatsAppStep2 && formData.accessControlType === 'dept'" label="部门" prop="deptIds">
         <el-select v-model="formData.deptIds" multiple filterable clearable style="width: 100%">
           <el-option v-for="item in deptOptions" :key="item.id" :label="item.name" :value="item.id" />
         </el-select>
       </el-form-item>
-      <el-form-item v-if="formData.agentIds?.length" label="Agent 认证">
+      <el-form-item v-if="!isWhatsAppStep2 && formData.agentIds?.length" label="Agent 认证">
         <div style="width: 100%">
           <div
             v-for="agentId in formData.agentIds"
@@ -104,15 +138,17 @@
           </div>
         </div>
       </el-form-item>
-      <el-form-item label="状态" prop="status">
+      <el-form-item v-if="!isWhatsAppStep2" label="状态" prop="status">
         <el-switch v-model="statusEnabled" />
       </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" @click="submitForm">保存</el-button>
+      <el-button v-if="isWhatsAppStep2" @click="waSetupStep = 1">返回上一步</el-button>
+      <el-button type="primary" @click="submitForm">{{ submitButtonText }}</el-button>
     </template>
   </Dialog>
+
 </template>
 
 <script lang="ts" setup>
@@ -159,7 +195,7 @@ const formRules = reactive({
   botToken: [
     {
       validator: (_: any, value: string, callback: (error?: Error) => void) => {
-        if (!formData.id && !value) {
+        if (!formData.id && formData.channelType !== 'whatsapp' && !value) {
           callback(new Error('请输入 Bot Token'))
           return
         }
@@ -173,6 +209,32 @@ const formRules = reactive({
 
 const agentOptions = ref<any[]>([])
 const deptOptions = ref<DeptApi.DeptVO[]>([])
+const waQrLoading = ref(false)
+const waQrSessionId = ref('')
+const waQrDataUrl = ref('')
+const waQrMessage = ref('')
+const waQrHelp = ref('')
+const waQrAvailable = ref(false)
+const waQrConnected = ref(false)
+const waQrExpired = ref(false)
+const waQrAutoRefreshing = ref(false)
+const waSetupStep = ref<1 | 2>(1)
+let waQrPollTimer: ReturnType<typeof setInterval> | undefined
+const isWhatsAppChannel = computed(() => formData.channelType === 'whatsapp')
+const isWhatsAppStep2 = computed(() => isWhatsAppChannel.value && waSetupStep.value === 2)
+const submitButtonText = computed(() => {
+  if (isWhatsAppChannel.value) {
+    return waSetupStep.value === 1 ? '下一步：扫码绑定' : '完成'
+  }
+  return '保存'
+})
+const tokenLabel = computed(() => (formData.channelType === 'whatsapp' ? '认证参数' : 'Bot Token'))
+const tokenHint = computed(() => {
+  if (formData.channelType === 'whatsapp') {
+    return '先保存渠道参数，下一步自动展示二维码并完成绑定；Business API 参数可选。'
+  }
+  return '请填写渠道所需的认证参数（如 token 或 key:secret）。'
+})
 const requiresBoundAccess = computed(() =>
   (formData.agentAccessPolicies || []).some((item) => item.authMode === 'bind_required')
 )
@@ -227,7 +289,9 @@ const resetQuery = () => {
 }
 
 const openForm = async (id?: number) => {
+  stopWhatsAppQrPolling()
   dialogVisible.value = true
+  waSetupStep.value = 1
   formData.id = undefined
   formData.channelType = 'telegram'
   formData.channelName = ''
@@ -242,20 +306,41 @@ const openForm = async (id?: number) => {
     const data = await ChannelApi.getChannelConfig(id)
     Object.assign(formData, data)
   }
+  waQrSessionId.value = ''
+  waQrDataUrl.value = ''
+  waQrMessage.value = ''
+  waQrHelp.value = ''
+  waQrAvailable.value = false
+  waQrConnected.value = false
+  waQrExpired.value = false
   syncAgentAccessPolicies()
 }
 
 const submitForm = async () => {
+  if (isWhatsAppStep2.value) {
+    dialogVisible.value = false
+    stopWhatsAppQrPolling()
+    await getList()
+    return
+  }
   const valid = await formRef.value?.validate()
   if (!valid) return
-  if (formData.id) {
+  const isEdit = !!formData.id
+  if (isEdit) {
     await ChannelApi.updateChannelConfig(formData)
-    message.success('修改成功')
   } else {
-    await ChannelApi.createChannelConfig(formData)
-    message.success('新增成功')
+    formData.id = await ChannelApi.createChannelConfig(formData)
   }
+  if (isWhatsAppChannel.value) {
+    waSetupStep.value = 2
+    message.success('参数已保存，请扫码完成绑定')
+    await startWhatsAppQr()
+    await getList()
+    return
+  }
+  message.success(isEdit ? '修改成功' : '新增成功')
   dialogVisible.value = false
+  stopWhatsAppQrPolling()
   await getList()
 }
 
@@ -275,6 +360,86 @@ const testConnection = async (row: ChannelApi.AgentxChannelConfigVO) => {
   }
 }
 
+const startWhatsAppQr = async () => {
+  if (waQrLoading.value) {
+    return
+  }
+  waQrLoading.value = true
+  try {
+    const data = await ChannelApi.startWhatsAppQrBind({
+      channelId: formData.id
+    })
+    waQrAvailable.value = !!data.available
+    waQrDataUrl.value = data.qrDataUrl || ''
+    waQrSessionId.value = data.sessionId || ''
+    waQrMessage.value = data.message || ''
+    waQrHelp.value = data.help || ''
+    waQrConnected.value = !!data.connected
+    waQrExpired.value = false
+    stopWhatsAppQrPolling()
+    if (!waQrConnected.value && waQrSessionId.value) {
+      waQrPollTimer = setInterval(pollWhatsAppQrStatus, 3000)
+    }
+    if (waQrConnected.value) {
+      message.success('WhatsApp 已连接')
+    }
+  } catch (error: any) {
+    stopWhatsAppQrPolling()
+    waQrAvailable.value = false
+    waQrConnected.value = false
+    waQrExpired.value = false
+    waQrMessage.value = error?.message || '二维码生成失败'
+  } finally {
+    waQrLoading.value = false
+  }
+}
+
+const pollWhatsAppQrStatus = async () => {
+  if (!waQrSessionId.value) {
+    return
+  }
+  try {
+    const data = await ChannelApi.getWhatsAppQrStatus(waQrSessionId.value, formData.id)
+    waQrConnected.value = !!data.connected
+    waQrExpired.value = !!data.expired
+    waQrMessage.value = data.message || waQrMessage.value
+    if (data.qrDataUrl) {
+      waQrDataUrl.value = data.qrDataUrl
+    }
+    if (data.sessionId) {
+      waQrSessionId.value = data.sessionId
+    }
+    if (waQrConnected.value) {
+      stopWhatsAppQrPolling()
+      message.success('WhatsApp 绑定成功')
+      await getList()
+      return
+    }
+    if (waQrExpired.value) {
+      stopWhatsAppQrPolling()
+      if (!waQrAutoRefreshing.value) {
+        waQrAutoRefreshing.value = true
+        waQrMessage.value = '二维码已过期，正在自动刷新...'
+        try {
+          await startWhatsAppQr()
+        } finally {
+          waQrAutoRefreshing.value = false
+        }
+      }
+    }
+  } catch (error: any) {
+    stopWhatsAppQrPolling()
+    waQrMessage.value = error?.message || '二维码状态查询失败'
+  }
+}
+
+const stopWhatsAppQrPolling = () => {
+  if (waQrPollTimer) {
+    clearInterval(waQrPollTimer)
+    waQrPollTimer = undefined
+  }
+}
+
 onMounted(async () => {
   const [agents, depts] = await Promise.all([
     AgentApi.getAgentPage({ pageNo: 1, pageSize: 200 } as any),
@@ -283,6 +448,10 @@ onMounted(async () => {
   agentOptions.value = agents.list || []
   deptOptions.value = depts || []
   await getList()
+})
+
+onBeforeUnmount(() => {
+  stopWhatsAppQrPolling()
 })
 
 const resolveAgentName = (agentId: number) => {
@@ -313,6 +482,31 @@ watch(
   () => [...(formData.agentIds || [])],
   () => {
     syncAgentAccessPolicies()
+  }
+)
+
+watch(
+  () => formData.channelType,
+  (val) => {
+    if (!dialogVisible.value) {
+      return
+    }
+    if (val === 'whatsapp') {
+      waSetupStep.value = 1
+      stopWhatsAppQrPolling()
+    } else {
+      waSetupStep.value = 1
+      stopWhatsAppQrPolling()
+    }
+  }
+)
+
+watch(
+  () => dialogVisible.value,
+  (val) => {
+    if (!val) {
+      stopWhatsAppQrPolling()
+    }
   }
 )
 </script>

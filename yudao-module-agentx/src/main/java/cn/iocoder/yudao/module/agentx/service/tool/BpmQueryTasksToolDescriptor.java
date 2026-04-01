@@ -25,10 +25,10 @@ public final class BpmQueryTasksToolDescriptor {
                         .setRequiredFields(List.of("tasks")))
                 .setPolicy(new AgentxToolPolicy()
                         .setRequiredCapability(AgentxCapability.READ_LEAVE)
+                        .setRequiredActions(List.of("bpm.task.read"))
                         .setRiskLevel(10)
                         .setApprovalRequired(false)
                         .setAuditTags(List.of("bpm", "read")));
     }
 
 }
-

@@ -15,6 +15,7 @@ class BpmToolDescriptorTest {
         assertEquals("object", descriptor.getInputSchema().getSchemaType());
         assertTrue(descriptor.getInputSchema().getRequiredFields().contains("user_id"));
         assertEquals(Integer.valueOf(10), descriptor.getPolicy().getRiskLevel());
+        assertTrue(descriptor.getPolicy().getRequiredActions().contains("bpm.task.read"));
     }
 
     @Test
@@ -26,6 +27,7 @@ class BpmToolDescriptorTest {
         assertTrue(descriptor.getInputSchema().getRequiredFields().contains("approved"));
         assertEquals(Integer.valueOf(30), descriptor.getPolicy().getRiskLevel());
         assertTrue(descriptor.getPolicy().getApprovalRequired());
+        assertTrue(descriptor.getPolicy().getRequiredActions().contains("bpm.task.approve"));
     }
 
 }

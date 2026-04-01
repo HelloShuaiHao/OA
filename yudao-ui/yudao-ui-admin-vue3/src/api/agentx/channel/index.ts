@@ -2,7 +2,7 @@ import request from '@/config/axios'
 
 export interface AgentxChannelConfigVO {
   id?: number
-  channelType: 'telegram' | 'wecom' | 'dingtalk'
+  channelType: 'telegram' | 'whatsapp' | 'wecom' | 'dingtalk'
   channelName: string
   botToken?: string
   agentIds: number[]
@@ -56,6 +56,28 @@ export interface AgentxUserChannelBindingVO {
   createTime?: string
 }
 
+export interface AgentxWhatsAppQrStartRespVO {
+  available: boolean
+  qrDataUrl?: string
+  sessionId?: string
+  message?: string
+  help?: string
+  connected: boolean
+}
+
+export interface AgentxWhatsAppQrStartReqVO {
+  channelId?: number
+  bindingId?: string
+}
+
+export interface AgentxWhatsAppQrStatusRespVO {
+  connected: boolean
+  expired: boolean
+  message?: string
+  qrDataUrl?: string
+  sessionId?: string
+}
+
 export const getChannelConfigPage = async (params: PageParam & { channelType?: string; channelName?: string; status?: number }) => {
   return await request.get({ url: '/agentx/channel/config/page', params })
 }
@@ -78,6 +100,35 @@ export const deleteChannelConfig = async (id: number) => {
 
 export const testChannelConfig = async (data: { channelId?: number; channelType: string; botToken?: string }) => {
   return await request.post({ url: '/agentx/channel/config/test', data })
+}
+
+export const startWhatsAppQrBind = async (data?: AgentxWhatsAppQrStartReqVO) => {
+  try {
+    return await request.post<AgentxWhatsAppQrStartRespVO>({ url: '/agentx/channel/whatsapp/qr/start', data })
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return await request.post<AgentxWhatsAppQrStartRespVO>({ url: '/agentx/channel/config/whatsapp/qr/start', data })
+    }
+    throw error
+  }
+}
+
+export const getWhatsAppQrStatus = async (sessionId?: string, channelId?: number) => {
+  const params: Record<string, any> = {}
+  if (sessionId) {
+    params.sessionId = sessionId
+  }
+  if (channelId) {
+    params.channelId = channelId
+  }
+  try {
+    return await request.get<AgentxWhatsAppQrStatusRespVO>({ url: '/agentx/channel/whatsapp/qr/status', params })
+  } catch (error: any) {
+    if (error?.response?.status === 404) {
+      return await request.get<AgentxWhatsAppQrStatusRespVO>({ url: '/agentx/channel/config/whatsapp/qr/status', params })
+    }
+    throw error
+  }
 }
 
 export const evaluateChannelAccess = async (data: AgentxChannelAccessEvaluateReqVO) => {

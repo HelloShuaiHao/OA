@@ -21,6 +21,12 @@ public interface AgentxChannelService {
 
     AgentxChannelAccessEvaluateRespVO evaluateChannelAccess(AgentxChannelAccessEvaluateReqVO reqVO);
 
+    AgentxWhatsAppQrStartRespVO startWhatsAppQrBind(AgentxWhatsAppQrStartReqVO reqVO);
+
+    AgentxWhatsAppQrStatusRespVO getWhatsAppQrStatus(String sessionId, Long channelId);
+
+    List<String> getEnabledWhatsAppBindingIds();
+
     void refreshRuntimeAccessByChannelType(String channelType);
 
     List<AgentxUserChannelBindingRespVO> getMyBindings(Long userId);
