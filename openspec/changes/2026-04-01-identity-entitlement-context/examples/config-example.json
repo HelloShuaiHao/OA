@@ -1,0 +1,37 @@
+{
+  "userId": 12345,
+  "agentId": "dispatch-assistant",
+  "deptName": "物流调度部",
+  "jobTitle": "调度员",
+  "roleTags": ["dispatcher", "regional_ops"],
+  "workRegion": "华东区",
+  "allowedActions": [
+    "route.read",
+    "route.plan.create",
+    "route.plan.adjust",
+    "warehouse.inventory.read",
+    "order.read"
+  ],
+  "resourceFilters": {
+    "region_codes": ["east"],
+    "warehouse_ids": [101, 102, 103],
+    "route_ids": ["R001", "R002", "R003"]
+  },
+  "obligations": [
+    {
+      "action": "route.plan.cross_region",
+      "requires": "approval",
+      "approverRole": "regional_manager",
+      "reason": "跨区域调度需要区域经理审批"
+    },
+    {
+      "action": "route.plan.emergency",
+      "requires": "approval",
+      "approverRole": "duty_supervisor",
+      "reason": "紧急调度需要值班主管审批"
+    }
+  ],
+  "policyVersion": "v2026.04.01",
+  "effectiveFrom": "2026-04-01T00:00:00Z",
+  "effectiveUntil": null
+}

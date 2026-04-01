@@ -1,0 +1,64 @@
+{
+  "accessDecision": "ALLOW",
+  "modelVisibleContext": {
+    "subjectProfile": {
+      "displayName": "张三",
+      "deptName": "物流调度部",
+      "jobTitle": "调度员",
+      "roleTags": ["dispatcher", "regional_ops"],
+      "workRegion": "华东区"
+    },
+    "capabilitySummary": {
+      "canDo": [
+        "查看华东区线路和运单",
+        "创建和调整华东区调度计划",
+        "查看本区域仓库库存"
+      ],
+      "cannotDo": [
+        "查看其他区域数据",
+        "修改全局配置",
+        "审批超限额订单"
+      ],
+      "requiresApproval": [
+        "跨区域调度需要区域经理审批",
+        "紧急调度需要值班主管审批"
+      ]
+    }
+  },
+  "systemEnforcedContext": {
+    "userId": 12345,
+    "channelUserId": "telegram:987654321",
+    "agentId": "dispatch-assistant",
+    "allowedActions": [
+      "route.read",
+      "route.plan.create",
+      "route.plan.adjust",
+      "warehouse.inventory.read",
+      "order.read"
+    ],
+    "resourceFilters": {
+      "region_codes": ["east"],
+      "warehouse_ids": [101, 102, 103],
+      "route_ids": ["R001", "R002", "R003"]
+    },
+    "obligations": [
+      {
+        "action": "route.plan.cross_region",
+        "requires": "approval",
+        "approverRole": "regional_manager",
+        "reason": "跨区域调度需要区域经理审批"
+      },
+      {
+        "action": "route.plan.emergency",
+        "requires": "approval",
+        "approverRole": "duty_supervisor",
+        "reason": "紧急调度需要值班主管审批"
+      }
+    ],
+    "policyVersion": "v2026.04.01",
+    "decisionId": "dec_xyz789",
+    "issuedAt": "2026-04-01T05:55:00Z",
+    "expiresAt": "2026-04-01T06:00:00Z",
+    "signature": "sha256:abcd1234ef567890..."
+  }
+}

@@ -1,0 +1,658 @@
+openapi: 3.0.3
+info:
+  title: AgentX Identity & Entitlement Context API
+  version: 1.0.0
+  description: |
+    通用的身份与权限上下文机制，为 Agent 提供用户身份感知和权限边界控制。
+
+    核心特性：
+    - 双层上下文：Model-Visible（给 Agent 看）+ System-Enforced（系统强制）
+    - 防泄露：永远只返回当前用户的上下文
+    - 强制校验：Tool 调用前系统层拦截
+    - 会话隔离：按 channel_user_id + agent_id + conversation_scope 绑定
+
+servers:
+  - url: http://localhost:48080/admin-api
+    description: 本地开发环境
+
+tags:
+  - name: access
+    description: 访问控制与鉴权
+  - name: entitlement
+    description: 权限配置管理
+  - name: audit
+    description: 审计日志
+
+paths:
+  /agentx/channel/access/evaluate:
+    post:
+      tags:
+        - access
+      summary: 评估用户访问权限
+      description: |
+        OF 调用此接口获取用户的身份和权限上下文。
+        返回双层上下文：
+        - model_visible_context: 注入到 System Prompt
+        - system_enforced_context: 由 OF 缓存并在 Tool 调用前校验
+      operationId: evaluateAccess
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessEvaluateRequest'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CommonResult'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/AccessEnvelope'
+      security:
+        - BearerAuth: []
+
+  /agentx/entitlement/config:
+    post:
+      tags:
+        - entitlement
+      summary: 创建权限配置
+      operationId: createEntitlement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntitlementConfigCreateReqVO'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CommonResult'
+                  - type: object
+                    properties:
+                      data:
+                        type: integer
+                        format: int64
+                        description: 配置ID
+      security:
+        - BearerAuth: []
+
+    get:
+      tags:
+        - entitlement
+      summary: 查询权限配置列表
+      operationId: listEntitlements
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: agentId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CommonResult'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/EntitlementConfigRespVO'
+      security:
+        - BearerAuth: []
+
+  /agentx/entitlement/config/{id}:
+    put:
+      tags:
+        - entitlement
+      summary: 更新权限配置
+      operationId: updateEntitlement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntitlementConfigUpdateReqVO'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommonResult'
+      security:
+        - BearerAuth: []
+
+    delete:
+      tags:
+        - entitlement
+      summary: 删除权限配置
+      operationId: deleteEntitlement
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommonResult'
+      security:
+        - BearerAuth: []
+
+  /agentx/audit/access-log/page:
+    get:
+      tags:
+        - audit
+      summary: 分页查询访问审计日志
+      operationId: getAccessAuditPage
+      parameters:
+        - name: pageNo
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: userId
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: agentId
+          in: query
+          schema:
+            type: string
+        - name: decision
+          in: query
+          schema:
+            type: string
+            enum: [ALLOW, DENY]
+        - name: startTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: endTime
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CommonResult'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/PageResult_AccessAuditRespVO'
+      security:
+        - BearerAuth: []
+
+components:
+  schemas:
+    CommonResult:
+      type: object
+      properties:
+        code:
+          type: integer
+          description: 错误码，0 表示成功
+        msg:
+          type: string
+          description: 错误提示
+        data:
+          type: object
+          description: 返回数据
+
+    AccessEvaluateRequest:
+      type: object
+      required:
+        - channelUserId
+        - agentId
+      properties:
+        channelUserId:
+          type: string
+          description: 渠道用户ID（如 telegram:987654321）
+          example: "telegram:987654321"
+        agentId:
+          type: string
+          description: Agent ID
+          example: "dispatch-assistant"
+        conversationScope:
+          type: string
+          description: 会话范围（用于隔离群聊等场景）
+          example: "session_abc123"
+
+    AccessEnvelope:
+      type: object
+      required:
+        - accessDecision
+      properties:
+        accessDecision:
+          type: string
+          enum: [ALLOW, DENY, REQUIRE_BINDING]
+          description: |
+            访问决策：
+            - ALLOW: 允许访问
+            - DENY: 拒绝访问
+            - REQUIRE_BINDING: 需要先绑定身份
+        modelVisibleContext:
+          $ref: '#/components/schemas/ModelVisibleContext'
+        systemEnforcedContext:
+          $ref: '#/components/schemas/SystemEnforcedContext'
+        bindingUrl:
+          type: string
+          description: 当 accessDecision=REQUIRE_BINDING 时返回绑定链接
+
+    ModelVisibleContext:
+      type: object
+      description: 给 Agent 看的上下文，注入到 System Prompt
+      properties:
+        subjectProfile:
+          $ref: '#/components/schemas/SubjectProfile'
+        capabilitySummary:
+          $ref: '#/components/schemas/CapabilitySummary'
+
+    SubjectProfile:
+      type: object
+      description: 用户身份信息
+      properties:
+        displayName:
+          type: string
+          description: 显示名称
+          example: "张三"
+        deptName:
+          type: string
+          description: 部门名称
+          example: "物流调度部"
+        jobTitle:
+          type: string
+          description: 岗位
+          example: "调度员"
+        roleTags:
+          type: array
+          items:
+            type: string
+          description: 角色标签
+          example: ["dispatcher", "regional_ops"]
+        workRegion:
+          type: string
+          description: 工作区域
+          example: "华东区"
+
+    CapabilitySummary:
+      type: object
+      description: 能力摘要
+      properties:
+        canDo:
+          type: array
+          items:
+            type: string
+          description: 可以做的操作
+          example:
+            - "查看华东区线路和运单"
+            - "创建和调整华东区调度计划"
+        cannotDo:
+          type: array
+          items:
+            type: string
+          description: 不能做的操作
+          example:
+            - "查看其他区域数据"
+            - "修改全局配置"
+        requiresApproval:
+          type: array
+          items:
+            type: string
+          description: 需要审批的操作
+          example:
+            - "跨区域调度需要区域经理审批"
+
+    SystemEnforcedContext:
+      type: object
+      description: 系统强制的上下文，不给 Agent 看，由 OF 缓存并校验
+      required:
+        - userId
+        - channelUserId
+        - agentId
+        - allowedActions
+        - policyVersion
+        - decisionId
+        - issuedAt
+        - expiresAt
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+        channelUserId:
+          type: string
+          description: 渠道用户ID
+        agentId:
+          type: string
+          description: Agent ID
+        allowedActions:
+          type: array
+          items:
+            type: string
+          description: 允许的操作列表
+          example:
+            - "route.read"
+            - "route.plan.create"
+            - "warehouse.inventory.read"
+        resourceFilters:
+          type: object
+          additionalProperties: true
+          description: 资源过滤条件
+          example:
+            region_codes: ["east"]
+            warehouse_ids: [101, 102, 103]
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obligation'
+          description: 审批约束
+        policyVersion:
+          type: string
+          description: 策略版本
+          example: "v2026.04.01"
+        decisionId:
+          type: string
+          description: 决策ID（用于审计）
+          example: "dec_xyz789"
+        issuedAt:
+          type: string
+          format: date-time
+          description: 签发时间
+        expiresAt:
+          type: string
+          format: date-time
+          description: 过期时间
+        signature:
+          type: string
+          description: 签名（防篡改）
+          example: "sha256:abcd1234..."
+
+    Obligation:
+      type: object
+      description: 审批约束
+      required:
+        - action
+        - requires
+      properties:
+        action:
+          type: string
+          description: 触发审批的操作
+          example: "route.plan.cross_region"
+        requires:
+          type: string
+          enum: [approval]
+          description: 约束类型
+        approverRole:
+          type: string
+          description: 审批人角色
+          example: "regional_manager"
+        reason:
+          type: string
+          description: 约束原因
+          example: "跨区域调度需要区域经理审批"
+
+    EntitlementConfigCreateReqVO:
+      type: object
+      required:
+        - userId
+        - allowedActions
+      properties:
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+        agentId:
+          type: string
+          description: Agent ID（NULL表示全局权限）
+        deptName:
+          type: string
+          description: 部门名称
+          maxLength: 100
+        jobTitle:
+          type: string
+          description: 岗位
+          maxLength: 100
+        roleTags:
+          type: array
+          items:
+            type: string
+          description: 角色标签
+        workRegion:
+          type: string
+          description: 工作区域
+          maxLength: 50
+        allowedActions:
+          type: array
+          items:
+            type: string
+          description: 允许的操作列表
+        resourceFilters:
+          type: object
+          additionalProperties: true
+          description: 资源过滤条件（JSON）
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obligation'
+          description: 审批约束
+        effectiveFrom:
+          type: string
+          format: date-time
+          description: 生效时间
+        effectiveUntil:
+          type: string
+          format: date-time
+          description: 失效时间
+
+    EntitlementConfigUpdateReqVO:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 配置ID
+        deptName:
+          type: string
+          description: 部门名称
+        jobTitle:
+          type: string
+          description: 岗位
+        roleTags:
+          type: array
+          items:
+            type: string
+          description: 角色标签
+        workRegion:
+          type: string
+          description: 工作区域
+        allowedActions:
+          type: array
+          items:
+            type: string
+          description: 允许的操作列表
+        resourceFilters:
+          type: object
+          additionalProperties: true
+          description: 资源过滤条件
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obligation'
+          description: 审批约束
+        effectiveFrom:
+          type: string
+          format: date-time
+          description: 生效时间
+        effectiveUntil:
+          type: string
+          format: date-time
+          description: 失效时间
+
+    EntitlementConfigRespVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 配置ID
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+        agentId:
+          type: string
+          description: Agent ID
+        deptName:
+          type: string
+          description: 部门名称
+        jobTitle:
+          type: string
+          description: 岗位
+        roleTags:
+          type: array
+          items:
+            type: string
+          description: 角色标签
+        workRegion:
+          type: string
+          description: 工作区域
+        allowedActions:
+          type: array
+          items:
+            type: string
+          description: 允许的操作列表
+        resourceFilters:
+          type: object
+          additionalProperties: true
+          description: 资源过滤条件
+        obligations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Obligation'
+          description: 审批约束
+        policyVersion:
+          type: string
+          description: 策略版本
+        effectiveFrom:
+          type: string
+          format: date-time
+          description: 生效时间
+        effectiveUntil:
+          type: string
+          format: date-time
+          description: 失效时间
+        createTime:
+          type: string
+          format: date-time
+          description: 创建时间
+        updateTime:
+          type: string
+          format: date-time
+          description: 更新时间
+
+    AccessAuditRespVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: 审计ID
+        decisionId:
+          type: string
+          description: 决策ID
+        userId:
+          type: integer
+          format: int64
+          description: 用户ID
+        channelUserId:
+          type: string
+          description: 渠道用户ID
+        agentId:
+          type: string
+          description: Agent ID
+        conversationScope:
+          type: string
+          description: 会话范围
+        action:
+          type: string
+          description: 操作
+        resourceType:
+          type: string
+          description: 资源类型
+        resourceId:
+          type: string
+          description: 资源ID
+        decision:
+          type: string
+          enum: [ALLOW, DENY]
+          description: 决策结果
+        denyReason:
+          type: string
+          description: 拒绝原因
+        policyVersion:
+          type: string
+          description: 策略版本
+        requestTime:
+          type: string
+          format: date-time
+          description: 请求时间
+
+    PageResult_AccessAuditRespVO:
+      type: object
+      properties:
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessAuditRespVO'
+        total:
+          type: integer
+          format: int64
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
