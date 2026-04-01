@@ -35,7 +35,7 @@
       <el-table-column label="访问控制" prop="accessControlType" width="120" />
       <el-table-column label="状态" prop="status" width="90" align="center">
         <template #default="scope">
-          <el-tag :type="scope.row.status === 1 ? 'success' : 'info'">{{ scope.row.status === 1 ? '启用' : '停用' }}</el-tag>
+          <el-tag :type="scope.row.status === 0 ? 'success' : 'info'">{{ scope.row.status === 0 ? '启用' : '停用' }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="创建时间" prop="createTime" width="180" :formatter="dateFormatter" />
@@ -72,10 +72,13 @@
       </el-form-item>
       <el-form-item label="访问控制" prop="accessControlType">
         <el-radio-group v-model="formData.accessControlType">
-          <el-radio label="all">所有员工</el-radio>
-          <el-radio label="dept">指定部门</el-radio>
-          <el-radio label="user">指定人员</el-radio>
+          <el-radio v-for="item in accessControlOptions" :key="item.value" :label="item.value">
+            {{ item.label }}
+          </el-radio>
         </el-radio-group>
+        <div class="mt-8px text-12px text-[var(--el-text-color-secondary)]">
+          {{ accessControlHint }}
+        </div>
       </el-form-item>
       <el-form-item v-if="formData.accessControlType === 'dept'" label="部门" prop="deptIds">
         <el-select v-model="formData.deptIds" multiple filterable clearable style="width: 100%">
@@ -144,11 +147,11 @@ const formData = reactive<ChannelApi.AgentxChannelConfigVO>({
   deptIds: [],
   userIds: [],
   agentAccessPolicies: [],
-  status: 1
+  status: 0
 })
 const statusEnabled = computed({
-  get: () => formData.status === 1,
-  set: (val: boolean) => (formData.status = val ? 1 : 0)
+  get: () => formData.status === 0,
+  set: (val: boolean) => (formData.status = val ? 0 : 1)
 })
 const formRules = reactive({
   channelType: [{ required: true, message: '请选择渠道类型', trigger: 'change' }],
@@ -170,6 +173,38 @@ const formRules = reactive({
 
 const agentOptions = ref<any[]>([])
 const deptOptions = ref<DeptApi.DeptVO[]>([])
+const requiresBoundAccess = computed(() =>
+  (formData.agentAccessPolicies || []).some((item) => item.authMode === 'bind_required')
+)
+const hasPublicAccess = computed(() =>
+  (formData.agentAccessPolicies || []).some((item) => item.authMode === 'public')
+)
+const accessControlOptions = computed(() => {
+  if (requiresBoundAccess.value) {
+    return [
+      { value: 'all', label: '所有已绑定员工' },
+      { value: 'dept', label: '指定部门员工' },
+      { value: 'user', label: '指定人员' }
+    ]
+  }
+  return [
+    { value: 'all', label: '所有访问者' },
+    { value: 'dept', label: '指定部门员工' },
+    { value: 'user', label: '指定人员' }
+  ]
+})
+const accessControlHint = computed(() => {
+  if (!formData.agentIds?.length) {
+    return '先选择关联 Agent，再配置访问范围和认证方式。'
+  }
+  if (requiresBoundAccess.value && hasPublicAccess.value) {
+    return '访问控制只作用于“必须绑定”的 Agent；公开访问的 Agent 允许匿名访问。'
+  }
+  if (requiresBoundAccess.value) {
+    return '访问控制作用于绑定后的 OA 员工范围，外部用户需先完成身份绑定。'
+  }
+  return '当前 Agent 允许匿名访问；这里配置的是可进一步放行的内部员工范围。'
+})
 
 const getList = async () => {
   loading.value = true
@@ -202,7 +237,7 @@ const openForm = async (id?: number) => {
   formData.deptIds = []
   formData.userIds = []
   formData.agentAccessPolicies = []
-  formData.status = 1
+  formData.status = 0
   if (id) {
     const data = await ChannelApi.getChannelConfig(id)
     Object.assign(formData, data)

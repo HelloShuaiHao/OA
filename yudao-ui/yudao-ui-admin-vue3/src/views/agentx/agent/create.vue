@@ -76,7 +76,43 @@
     </el-card>
 
     <el-card v-else-if="activeStep === 2" shadow="never">
-      <el-checkbox-group v-model="formData.capabilityKeys">
+      <template v-if="isCustomTemplate">
+        <el-alert
+          type="info"
+          show-icon
+          :closable="false"
+          title="自定义员工支持先用自然语言描述职责，再按需补能力和流程。"
+          description="如果你现在还没有确定流程，可以先写清楚这个员工该做什么、什么情况下介入、回答风格和边界。保存草稿时不强制选流程。"
+          class="mb-16px"
+        />
+        <el-form label-width="120px">
+          <el-form-item label="工作方式说明">
+            <el-input
+              v-model="formData.customSpec"
+              type="textarea"
+              :rows="6"
+              placeholder="例如：负责根据员工描述判断是否需要发起 OA 流程；能回答制度问题；涉及请假/外出/报销时再选择对应流程，不确定时先追问关键信息。"
+            />
+          </el-form-item>
+        </el-form>
+        <div class="group-title">可选能力</div>
+        <div class="custom-capability-tip">这一步不是必填；如果你已经知道它需要哪些能力，可以先勾上。</div>
+        <el-checkbox-group v-model="formData.capabilityKeys">
+          <div v-for="group in capabilityGroups" :key="group.name" class="capability-group">
+            <div class="group-title">{{ group.name }}</div>
+            <div class="group-options">
+              <el-checkbox v-for="item in group.items" :key="item.key" :value="item.key" class="capability-option">
+                <div class="capability-option__body">
+                  <div class="capability-option__name">{{ item.name }}</div>
+                  <div class="capability-option__desc">{{ item.description }}</div>
+                  <el-tag size="small" type="info" effect="plain">可启用</el-tag>
+                </div>
+              </el-checkbox>
+            </div>
+          </div>
+        </el-checkbox-group>
+      </template>
+      <el-checkbox-group v-else v-model="formData.capabilityKeys">
         <div v-for="group in capabilityGroups" :key="group.name" class="capability-group">
           <div class="group-title">{{ group.name }}</div>
           <div class="group-options">
@@ -92,11 +128,21 @@
       </el-checkbox-group>
     </el-card>
 
-    <StepProcess
-      v-else-if="activeStep === 3"
-      :model-value="formData.processConfig"
-      @update:model-value="handleProcessConfigChange"
-    />
+    <template v-else-if="activeStep === 3">
+      <ContentWrap v-if="isCustomTemplate">
+        <el-alert
+          type="warning"
+          show-icon
+          :closable="false"
+          title="自定义员工可以先不选流程保存草稿。"
+          description="只有在你准备“激活并发布”时，才建议至少关联 1 个流程，这样它在需要 OA 交互时才知道该跟随哪条流程。"
+        />
+      </ContentWrap>
+      <StepProcess
+        :model-value="formData.processConfig"
+        @update:model-value="handleProcessConfigChange"
+      />
+    </template>
 
     <el-card v-else shadow="never">
       <el-descriptions border :column="1" title="配置预览">
@@ -108,6 +154,9 @@
         </el-descriptions-item>
         <el-descriptions-item label="模板类型">
           {{ templateOptions.find((t) => t.type === formData.templateType)?.name || '-' }}
+        </el-descriptions-item>
+        <el-descriptions-item v-if="isCustomTemplate" label="自定义说明">
+          {{ formData.customSpec || '未填写' }}
         </el-descriptions-item>
         <el-descriptions-item label="能力数量">{{ formData.capabilityKeys.length }}</el-descriptions-item>
 
@@ -183,6 +232,7 @@ const fallbackTemplateOptions: TemplateOption[] = Object.entries(templateMetaMap
   ...meta
 }))
 const templateOptions = ref<TemplateOption[]>(fallbackTemplateOptions)
+const CUSTOM_SPEC_MARKER = '\n\n【自定义工作方式】\n'
 
 const capabilityGroups = [
   {
@@ -243,11 +293,13 @@ const formData = reactive({
     avatarUrl: ''
   },
   templateType: '',
+  customSpec: '',
   capabilityKeys: [] as string[],
   processConfig: {
     selectedProcesses: [] as AgentxProcessDefinitionVO[]
   }
 })
+const isCustomTemplate = computed(() => formData.templateType === 'custom')
 
 const checkAgentNameRemote = async (agentName: string) => {
   if (lastCheckedAgentName.value === agentName && lastCheckedAvailable.value !== null) {
@@ -336,6 +388,9 @@ const nextStepDisabled = computed(() => {
     return !formData.templateType
   }
   if (activeStep.value === 2) {
+    if (isCustomTemplate.value) {
+      return false
+    }
     return formData.capabilityKeys.length === 0
   }
   if (activeStep.value === 3) {
@@ -389,13 +444,13 @@ const nextStep = async () => {
     message.warning('请选择模板')
     return
   }
-  if (activeStep.value === 2 && formData.capabilityKeys.length === 0) {
+  if (activeStep.value === 2 && !isCustomTemplate.value && formData.capabilityKeys.length === 0) {
     message.warning('至少勾选 1 个能力')
     return
   }
   if (activeStep.value === 3) {
     const selected = formData.processConfig.selectedProcesses.length > 0
-    if (!selected) {
+    if (!selected && !isCustomTemplate.value) {
       message.warning('至少关联 1 个流程')
       return
     }
@@ -415,18 +470,35 @@ const buildPayload = (): AgentApi.AgentVO => {
   const capabilityMap = Object.fromEntries(
     capabilityGroups.flatMap((group) => group.items.map((item) => [item.key, item.name]))
   )
+  const normalizedDescription = formData.basic.description.trim()
+  const normalizedCustomSpec = formData.customSpec.trim()
+  const mergedDescription =
+    isCustomTemplate.value && normalizedCustomSpec
+      ? `${normalizedDescription}${CUSTOM_SPEC_MARKER}${normalizedCustomSpec}`
+      : normalizedDescription
+  const capabilities =
+    isCustomTemplate.value && formData.capabilityKeys.length === 0 && normalizedCustomSpec
+      ? [
+          {
+            capabilityKey: 'custom_brief',
+            capabilityName: '自定义职责说明',
+            enabled: true,
+            conditions: normalizedCustomSpec
+          }
+        ]
+      : formData.capabilityKeys.map((key) => ({
+          capabilityKey: key,
+          capabilityName: capabilityMap[key] || key,
+          enabled: true
+        }))
   return {
     id: isEdit.value ? Number(route.query.id) : undefined,
     agentName: formData.basic.agentName,
-    description: formData.basic.description,
+    description: mergedDescription,
     deptId: formData.basic.deptId as number,
     avatarUrl: formData.basic.avatarUrl,
     templateType: formData.templateType,
-    capabilities: formData.capabilityKeys.map((key) => ({
-      capabilityKey: key,
-      capabilityName: capabilityMap[key] || key,
-      enabled: true
-    })),
+    capabilities,
     processes: formData.processConfig.selectedProcesses.map((item) => ({
       processDefinitionId: item.id,
       processDefinitionKey: item.key,
@@ -470,6 +542,10 @@ const submitDraft = async () => {
 }
 
 const submitActivate = async () => {
+  if (isCustomTemplate.value && formData.processConfig.selectedProcesses.length === 0) {
+    message.warning('自定义员工激活前至少关联 1 个流程；如果还没确定，可以先保存草稿')
+    return
+  }
   submitLoading.value = true
   try {
     const id = await AgentApi.createAgentPublish(buildPayload())
@@ -495,8 +571,11 @@ const submitUpdate = async () => {
 const loadEditData = async () => {
   if (!isEdit.value) return
   const data = await AgentApi.getAgent(Number(route.query.id))
+  const description = data.description || ''
+  const markerIndex = description.indexOf(CUSTOM_SPEC_MARKER)
   formData.basic.agentName = data.agentName
-  formData.basic.description = data.description
+  formData.basic.description = markerIndex >= 0 ? description.slice(0, markerIndex) : description
+  formData.customSpec = markerIndex >= 0 ? description.slice(markerIndex + CUSTOM_SPEC_MARKER.length) : ''
   formData.basic.deptId = data.deptId
   formData.basic.avatarUrl = data.avatarUrl || ''
   formData.templateType = data.templateType || 'custom'
@@ -584,6 +663,12 @@ onMounted(async () => {
 .group-title {
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+.custom-capability-tip {
+  margin-bottom: 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
 }
 
 .group-options {

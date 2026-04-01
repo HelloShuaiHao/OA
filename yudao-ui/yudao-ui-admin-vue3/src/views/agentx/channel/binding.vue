@@ -166,17 +166,36 @@ const handleAdminUnbind = async (id: number) => {
   await getMyBindings()
 }
 
-onMounted(async () => {
+const syncFromRouteQuery = async () => {
   const tab = String(route.query.tab || '')
   if (tab === 'admin' && hasPermission(['agentx:channel:query'])) {
     activeTab.value = 'admin'
   }
   const userId = Number(route.query.userId)
   if (Number.isFinite(userId) && userId > 0) {
+    // 从“用户管理 -> 渠道绑定”进入时，优先只按 userId 查询，避免沿用历史筛选导致看不到数据
+    queryParams.pageNo = 1
     queryParams.userId = userId
+    queryParams.channelType = undefined
+    queryParams.status = undefined
     activeTab.value = 'admin'
   }
-  await getMyBindings()
   await getAdminList()
+}
+
+watch(
+  () => [route.query.tab, route.query.userId],
+  async () => {
+    await syncFromRouteQuery()
+  }
+)
+
+onActivated(async () => {
+  await syncFromRouteQuery()
+})
+
+onMounted(async () => {
+  await getMyBindings()
+  await syncFromRouteQuery()
 })
 </script>
