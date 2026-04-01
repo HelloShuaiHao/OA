@@ -228,9 +228,16 @@ wx:
 yudao:
   captcha:
     enable: false # 本地环境，暂时关闭图片验证码，方便登录等接口的测试；
+  web:
+    admin-ui:
+      # 注意：这里要填写 OA 前端地址（不是 OA 后端 API 端口）
+      url: http://127.0.0.1:4173
   security:
     mock-enable: true
   agentx:
+    bind:
+      # 绑定链接统一指向管理台路由页，避免误指向 /admin-api 服务
+      base-url: ${yudao.web.admin-ui.url}
     openfang:
       base-url: http://127.0.0.1:4201
       protection-enabled: true

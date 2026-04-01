@@ -58,7 +58,8 @@ yudao:
   agentx:
     bind:
       secret: agentx-bind-secret
-      base-url: http://localhost:48080
+      # 必须指向 OA 前端地址（用于打开 /agentx/bind 页面），不要填后端 API 地址
+      base-url: ${yudao.web.admin-ui.url}
       expire-minutes: 10
     role:
       default-approver-id: 1
