@@ -24,6 +24,7 @@ import cn.iocoder.yudao.module.agentx.service.instance.OpenfangApiKeyCrypto;
 import cn.iocoder.yudao.module.agentx.service.metrics.AgentxMetricsService;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.service.user.AdminUserService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -39,18 +40,21 @@ import javax.annotation.Resource;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static cn.iocoder.yudao.framework.common.exception.util.ServiceExceptionUtil.exception;
 import static cn.iocoder.yudao.framework.common.util.collection.CollectionUtils.convertList;
 
 @Service
 @Validated
+@Slf4j
 public class AgentxChannelServiceImpl implements AgentxChannelService {
 
     private static final Set<String> VALID_CHANNEL_TYPES = new HashSet<>(Arrays.asList("telegram", "wecom", "dingtalk"));
     private static final String BOT_TOKEN_FALLBACK_PREFIX = "b64:";
     private static final String AUTH_MODE_PUBLIC = "public";
     private static final String AUTH_MODE_BIND_REQUIRED = "bind_required";
+    private static final Long TELEGRAM_AUTH_REQUIRED_PLACEHOLDER_USER_ID = -1L;
 
     @Resource
     private AgentxChannelConfigMapper channelConfigMapper;
@@ -246,6 +250,18 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
     }
 
     @Override
+    public void refreshRuntimeAccessByChannelType(String channelType) {
+        validateChannelType(channelType);
+        List<AgentxChannelConfigDO> channels = channelConfigMapper.selectListByChannelType(channelType);
+        if (CollUtil.isEmpty(channels)) {
+            return;
+        }
+        for (AgentxChannelConfigDO channel : channels) {
+            syncChannelToOpenfang(channel.getId());
+        }
+    }
+
+    @Override
     public List<AgentxUserChannelBindingRespVO> getMyBindings(Long userId) {
         return BeanUtils.toBean(userChannelBindingMapper.selectListByUserId(userId), AgentxUserChannelBindingRespVO.class);
     }
@@ -261,6 +277,7 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
                 .setId(id)
                 .setStatus(0)
                 .setUnbindTime(LocalDateTime.now()));
+        refreshRuntimeAccessByChannelType(binding.getChannelType());
     }
 
     @Override
@@ -274,6 +291,7 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
                 .setId(id)
                 .setStatus(0)
                 .setUnbindTime(LocalDateTime.now()));
+        refreshRuntimeAccessByChannelType(binding.getChannelType());
     }
 
     @Override
@@ -430,6 +448,21 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
         return AUTH_MODE_PUBLIC.equals(authMode) ? AUTH_MODE_PUBLIC : AUTH_MODE_BIND_REQUIRED;
     }
 
+    private AgentxAgentDO resolveDefaultActiveAgent(Long channelId) {
+        List<AgentxChannelAgentDO> relations = channelAgentMapper.selectListByChannelId(channelId);
+        if (CollUtil.isEmpty(relations)) {
+            return null;
+        }
+        for (AgentxChannelAgentDO relation : relations) {
+            AgentxAgentDO agent = agentMapper.selectById(relation.getAgentId());
+            if (agent == null || !ObjectUtil.equal(agent.getStatus(), 1)) {
+                continue;
+            }
+            return agent;
+        }
+        return null;
+    }
+
     private boolean isBoundUserAllowed(Map<String, Object> config, Long userId) {
         String accessControlType = String.valueOf(config.getOrDefault("accessControlType", "all"));
         if (StrUtil.equals("all", accessControlType)) {
@@ -476,21 +509,43 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
             removeChannelFromOpenfang(channel);
             return;
         }
+        validateBindRequiredRuntimeGateSupport(channel);
         AgentxOpenfangInstanceDO instance = getFirstEnabledOpenfangInstance();
         if (instance == null) {
             metricsService.recordOpenfangCall(false);
             return;
         }
         try {
-            String endpoint = StrUtil.format("{}/api/channels/{}/configure",
-                    StrUtil.removeSuffix(instance.getEndpoint(), "/"), channel.getChannelType());
-            restTemplate.exchange(endpoint, HttpMethod.POST,
-                    new HttpEntity<>(Collections.singletonMap("fields", buildOpenfangChannelFields(channel)),
-                            buildOpenfangHeaders(instance)),
-                    Object.class);
+            if ("telegram".equals(channel.getChannelType())) {
+                syncTelegramBinding(instance, channel);
+            } else {
+                String endpoint = StrUtil.format("{}/api/channels/{}/configure",
+                        StrUtil.removeSuffix(instance.getEndpoint(), "/"), channel.getChannelType());
+                restTemplate.exchange(endpoint, HttpMethod.POST,
+                        new HttpEntity<>(Collections.singletonMap("fields", buildOpenfangChannelFields(channel)),
+                                buildOpenfangHeaders(instance)),
+                        Object.class);
+            }
             metricsService.recordOpenfangCall(true);
+        } catch (HttpStatusCodeException ex) {
+            metricsService.recordOpenfangCall(false);
+            throw exception(ErrorCodeConstants.CHANNEL_SYNC_OPENFANG_FAILED, resolveOpenfangErrorMessage(ex));
         } catch (Exception ex) {
             metricsService.recordOpenfangCall(false);
+            throw exception(ErrorCodeConstants.CHANNEL_SYNC_OPENFANG_FAILED, StrUtil.blankToDefault(ex.getMessage(), "未知错误"));
+        }
+    }
+
+    private void validateBindRequiredRuntimeGateSupport(AgentxChannelConfigDO channel) {
+        AgentxAgentDO defaultAgent = resolveDefaultActiveAgent(channel.getId());
+        if (defaultAgent == null) {
+            return;
+        }
+        Map<String, Object> config = parseConfig(channel);
+        String authMode = resolveAgentAuthMode(config, defaultAgent.getId());
+        if (AUTH_MODE_BIND_REQUIRED.equals(authMode) && !"telegram".equals(channel.getChannelType())) {
+            throw exception(ErrorCodeConstants.CHANNEL_SYNC_OPENFANG_FAILED,
+                    "当前渠道暂不支持 bind_required 强制门禁，请改用 Telegram 或接入 OpenFang access/evaluate 前置校验");
         }
     }
 
@@ -501,13 +556,108 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
             return;
         }
         try {
-            String endpoint = StrUtil.format("{}/api/channels/{}/configure",
-                    StrUtil.removeSuffix(instance.getEndpoint(), "/"), channel.getChannelType());
-            restTemplate.exchange(endpoint, HttpMethod.DELETE, new HttpEntity<>(buildOpenfangHeaders(instance)), Object.class);
+            if ("telegram".equals(channel.getChannelType())) {
+                String endpoint = StrUtil.format("{}/api/telegram/bindings/{}",
+                        StrUtil.removeSuffix(instance.getEndpoint(), "/"), buildTelegramBindingId(channel.getId()));
+                restTemplate.exchange(endpoint, HttpMethod.DELETE, new HttpEntity<>(buildOpenfangHeaders(instance)), Object.class);
+            } else {
+                String endpoint = StrUtil.format("{}/api/channels/{}/configure",
+                        StrUtil.removeSuffix(instance.getEndpoint(), "/"), channel.getChannelType());
+                restTemplate.exchange(endpoint, HttpMethod.DELETE, new HttpEntity<>(buildOpenfangHeaders(instance)), Object.class);
+            }
             metricsService.recordOpenfangCall(true);
+        } catch (HttpStatusCodeException ex) {
+            metricsService.recordOpenfangCall(false);
+            throw exception(ErrorCodeConstants.CHANNEL_SYNC_OPENFANG_FAILED, resolveOpenfangErrorMessage(ex));
         } catch (Exception ex) {
             metricsService.recordOpenfangCall(false);
+            throw exception(ErrorCodeConstants.CHANNEL_SYNC_OPENFANG_FAILED, StrUtil.blankToDefault(ex.getMessage(), "未知错误"));
         }
+    }
+
+    private void syncTelegramBinding(AgentxOpenfangInstanceDO instance, AgentxChannelConfigDO channel) {
+        AgentxAgentDO defaultAgent = resolveDefaultActiveAgent(channel.getId());
+        if (defaultAgent == null) {
+            return;
+        }
+        String defaultAgentName = buildOpenfangAgentName(defaultAgent);
+        String baseUrl = StrUtil.removeSuffix(instance.getEndpoint(), "/");
+        String bindingId = buildTelegramBindingId(channel.getId());
+        String authToken = decryptBotToken(channel.getBotTokenEncrypted());
+        Map<String, Object> config = parseConfig(channel);
+        String authMode = resolveAgentAuthMode(config, defaultAgent.getId());
+        List<Long> allowedUsers = AUTH_MODE_BIND_REQUIRED.equals(authMode)
+                ? buildTelegramAllowedUsers(channel, config)
+                : Collections.emptyList();
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("id", bindingId);
+        body.put("agent", defaultAgentName);
+        body.put("token", authToken);
+        body.put("enabled", true);
+        body.put("poll_interval_secs", 1);
+        body.put("allowed_users", allowedUsers);
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(body, buildOpenfangHeaders(instance));
+        String createEndpoint = baseUrl + "/api/telegram/bindings";
+        String updateEndpoint = createEndpoint + "/" + bindingId;
+        try {
+            restTemplate.exchange(updateEndpoint, HttpMethod.PATCH, entity, Object.class);
+        } catch (HttpStatusCodeException ex) {
+            if (ex.getStatusCode().value() != 404) {
+                throw ex;
+            }
+            restTemplate.exchange(createEndpoint, HttpMethod.POST, entity, Object.class);
+        }
+    }
+
+    private List<Long> buildTelegramAllowedUsers(AgentxChannelConfigDO channel, Map<String, Object> config) {
+        List<Long> allowedUsers = userChannelBindingMapper.selectListByChannelType(channel.getChannelType()).stream()
+                .filter(binding -> StrUtil.isNotBlank(binding.getChannelUserId()))
+                .filter(binding -> isBoundUserAllowed(config, binding.getUserId()))
+                .map(AgentxUserChannelBindingDO::getChannelUserId)
+                .map(this::parseTelegramUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+        if (CollUtil.isNotEmpty(allowedUsers)) {
+            return allowedUsers;
+        }
+        return Collections.singletonList(TELEGRAM_AUTH_REQUIRED_PLACEHOLDER_USER_ID);
+    }
+
+    private Long parseTelegramUserId(String channelUserId) {
+        try {
+            return Long.valueOf(channelUserId);
+        } catch (Exception ex) {
+            log.warn("ignore non-numeric telegram channel user id, value={}", channelUserId);
+            return null;
+        }
+    }
+
+    private String buildTelegramBindingId(Long channelId) {
+        return "agentx-channel-" + channelId;
+    }
+
+    private String resolveOpenfangErrorMessage(HttpStatusCodeException ex) {
+        String body = StrUtil.trimToEmpty(ex.getResponseBodyAsString());
+        if (StrUtil.isBlank(body)) {
+            return "HTTP " + ex.getStatusCode().value();
+        }
+        try {
+            Map<String, Object> payload = JsonUtils.parseObject(body, Map.class);
+            if (payload != null) {
+                Object error = payload.get("error");
+                if (error != null && StrUtil.isNotBlank(String.valueOf(error))) {
+                    return String.valueOf(error);
+                }
+                Object message = payload.get("message");
+                if (message != null && StrUtil.isNotBlank(String.valueOf(message))) {
+                    return String.valueOf(message);
+                }
+            }
+        } catch (Exception ignore) {
+            // ignore parse failure and fall back to raw response body
+        }
+        return body;
     }
 
     private AgentxOpenfangInstanceDO getFirstEnabledOpenfangInstance() {
@@ -550,18 +700,8 @@ public class AgentxChannelServiceImpl implements AgentxChannelService {
     }
 
     private String buildDefaultAgentName(Long channelId) {
-        List<AgentxChannelAgentDO> relations = channelAgentMapper.selectListByChannelId(channelId);
-        if (CollUtil.isEmpty(relations)) {
-            return null;
-        }
-        for (AgentxChannelAgentDO relation : relations) {
-            AgentxAgentDO agent = agentMapper.selectById(relation.getAgentId());
-            if (agent == null || !ObjectUtil.equal(agent.getStatus(), 1)) {
-                continue;
-            }
-            return buildOpenfangAgentName(agent);
-        }
-        return null;
+        AgentxAgentDO agent = resolveDefaultActiveAgent(channelId);
+        return agent == null ? null : buildOpenfangAgentName(agent);
     }
 
     private String buildOpenfangAgentName(AgentxAgentDO agent) {

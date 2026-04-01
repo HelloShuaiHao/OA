@@ -21,9 +21,24 @@ public interface AgentxUserChannelBindingMapper extends BaseMapperX<AgentxUserCh
                 .last("LIMIT 1"));
     }
 
+    default AgentxUserChannelBindingDO selectLatestByChannelIdentity(String channelType, String channelUserId) {
+        return selectOne(new LambdaQueryWrapperX<AgentxUserChannelBindingDO>()
+                .eq(AgentxUserChannelBindingDO::getChannelType, channelType)
+                .eq(AgentxUserChannelBindingDO::getChannelUserId, channelUserId)
+                .orderByDesc(AgentxUserChannelBindingDO::getId)
+                .last("LIMIT 1"));
+    }
+
     default List<AgentxUserChannelBindingDO> selectListByUserId(Long userId) {
         return selectList(new LambdaQueryWrapperX<AgentxUserChannelBindingDO>()
                 .eq(AgentxUserChannelBindingDO::getUserId, userId)
+                .eq(AgentxUserChannelBindingDO::getStatus, 1)
+                .orderByDesc(AgentxUserChannelBindingDO::getId));
+    }
+
+    default List<AgentxUserChannelBindingDO> selectListByChannelType(String channelType) {
+        return selectList(new LambdaQueryWrapperX<AgentxUserChannelBindingDO>()
+                .eq(AgentxUserChannelBindingDO::getChannelType, channelType)
                 .eq(AgentxUserChannelBindingDO::getStatus, 1)
                 .orderByDesc(AgentxUserChannelBindingDO::getId));
     }

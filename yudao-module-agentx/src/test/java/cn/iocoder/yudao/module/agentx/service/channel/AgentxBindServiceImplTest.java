@@ -22,6 +22,7 @@ import static org.mockito.Mockito.*;
 class AgentxBindServiceImplTest {
 
     private final AgentxUserChannelBindingMapper bindingMapper = Mockito.mock(AgentxUserChannelBindingMapper.class);
+    private final AgentxChannelService channelService = Mockito.mock(AgentxChannelService.class);
     private final AgentxBindProperties bindProperties = new AgentxBindProperties();
     private final AgentxBindServiceImpl service = buildService();
 
@@ -46,6 +47,7 @@ class AgentxBindServiceImplTest {
     @Test
     void shouldCreateBindingWhenTokenValidAndNotBoundBefore() {
         when(bindingMapper.selectByChannelIdentity("telegram", "10001")).thenReturn(null);
+        when(bindingMapper.selectLatestByChannelIdentity("telegram", "10001")).thenReturn(null);
 
         String token = tokenOf("telegram", "10001", "tom", System.currentTimeMillis() + 60_000L);
         service.confirmBind(token, 99L);
@@ -57,6 +59,29 @@ class AgentxBindServiceImplTest {
         assertEquals("telegram", saved.getChannelType());
         assertEquals("10001", saved.getChannelUserId());
         assertEquals(1, saved.getStatus());
+        verify(channelService).refreshRuntimeAccessByChannelType("telegram");
+    }
+
+    @Test
+    void shouldReactivateHistoricalBindingWhenExists() {
+        when(bindingMapper.selectByChannelIdentity("telegram", "10001")).thenReturn(null);
+        AgentxUserChannelBindingDO history = new AgentxUserChannelBindingDO();
+        history.setId(123L);
+        history.setStatus(0);
+        when(bindingMapper.selectLatestByChannelIdentity("telegram", "10001")).thenReturn(history);
+
+        String token = tokenOf("telegram", "10001", "tom", System.currentTimeMillis() + 60_000L);
+        service.confirmBind(token, 99L);
+
+        ArgumentCaptor<AgentxUserChannelBindingDO> captor = ArgumentCaptor.forClass(AgentxUserChannelBindingDO.class);
+        verify(bindingMapper).updateById(captor.capture());
+        verify(bindingMapper, never()).insert(any(AgentxUserChannelBindingDO.class));
+        AgentxUserChannelBindingDO updated = captor.getValue();
+        assertEquals(123L, updated.getId());
+        assertEquals(99L, updated.getUserId());
+        assertEquals(1, updated.getStatus());
+        assertNull(updated.getUnbindTime());
+        verify(channelService).refreshRuntimeAccessByChannelType("telegram");
     }
 
     @Test
@@ -69,6 +94,7 @@ class AgentxBindServiceImplTest {
         String token = tokenOf("telegram", "10001", "tom", System.currentTimeMillis() + 60_000L);
         assertEquals("您已绑定，无需重复操作", service.confirmBind(token, 99L).getMessage());
         verify(bindingMapper, never()).insert(any(AgentxUserChannelBindingDO.class));
+        verify(channelService).refreshRuntimeAccessByChannelType("telegram");
     }
 
     @Test
@@ -100,6 +126,9 @@ class AgentxBindServiceImplTest {
             java.lang.reflect.Field mapperField = AgentxBindServiceImpl.class.getDeclaredField("userChannelBindingMapper");
             mapperField.setAccessible(true);
             mapperField.set(impl, bindingMapper);
+            java.lang.reflect.Field channelServiceField = AgentxBindServiceImpl.class.getDeclaredField("channelService");
+            channelServiceField.setAccessible(true);
+            channelServiceField.set(impl, channelService);
             return impl;
         } catch (Exception ex) {
             throw new RuntimeException(ex);

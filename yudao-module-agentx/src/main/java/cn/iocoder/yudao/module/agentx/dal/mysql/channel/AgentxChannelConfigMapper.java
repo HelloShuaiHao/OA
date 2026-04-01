@@ -30,4 +30,8 @@ public interface AgentxChannelConfigMapper extends BaseMapperX<AgentxChannelConf
         return selectBatchIds(ids);
     }
 
+    default List<AgentxChannelConfigDO> selectListByChannelType(String channelType) {
+        return selectList(AgentxChannelConfigDO::getChannelType, channelType);
+    }
+
 }

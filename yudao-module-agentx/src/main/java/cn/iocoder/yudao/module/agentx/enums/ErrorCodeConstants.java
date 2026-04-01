@@ -41,6 +41,7 @@ public interface ErrorCodeConstants {
     ErrorCode CHANNEL_TYPE_INVALID = new ErrorCode(1_024_005_002, "渠道类型非法");
     ErrorCode CHANNEL_BOT_TOKEN_REQUIRED = new ErrorCode(1_024_005_003, "Bot Token 不能为空");
     ErrorCode CHANNEL_TEST_CONNECT_FAILED = new ErrorCode(1_024_005_004, "渠道连接测试失败：{}");
+    ErrorCode CHANNEL_SYNC_OPENFANG_FAILED = new ErrorCode(1_024_005_005, "同步 OpenFang 渠道失败：{}");
 
     ErrorCode CHANNEL_BIND_TOKEN_INVALID = new ErrorCode(1_024_006_001, "绑定 Token 无效");
     ErrorCode CHANNEL_BIND_TOKEN_EXPIRED = new ErrorCode(1_024_006_002, "绑定链接已过期，请重新获取");

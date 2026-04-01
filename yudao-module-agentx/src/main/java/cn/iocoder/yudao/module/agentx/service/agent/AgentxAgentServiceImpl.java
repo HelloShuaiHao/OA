@@ -59,6 +59,7 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
     private static final int STATUS_DISABLED = 2;
     private static final int OPENFANG_SYNC_MAX_ATTEMPTS = 3;
     private static final long OPENFANG_SYNC_BASE_BACKOFF_MILLIS = 200L;
+    private static final String CUSTOM_SPEC_MARKER = "【自定义工作方式】";
 
     @Resource
     private AgentxAgentMapper agentMapper;
@@ -213,7 +214,7 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
     }
 
     private void replaceCapabilities(Long agentId, List<AgentxAgentSaveReqVO.CapabilityItem> capabilities) {
-        capabilityMapper.deleteByAgentId(agentId);
+        capabilityMapper.deleteForceByAgentId(agentId);
         if (CollUtil.isEmpty(capabilities)) {
             return;
         }
@@ -541,11 +542,34 @@ public class AgentxAgentServiceImpl implements AgentxAgentService {
                         .filter(StrUtil::isNotBlank)
                         .reduce((left, right) -> left + "、" + right)
                         .orElse("无");
-        return StrUtil.format("你是 OA 数字员工：{}。部门：{}。模板：{}。可用能力：{}。请遵循 OA 治理约束执行任务。",
+        String capabilityConditions = capabilities == null ? "" :
+                capabilities.stream()
+                        .map(AgentxAgentCapabilityDO::getConditions)
+                        .filter(StrUtil::isNotBlank)
+                        .reduce((left, right) -> left + "；" + right)
+                        .orElse("");
+        String description = StrUtil.blankToDefault(agent.getDescription(), agent.getAgentName()).trim();
+        String customSpec = extractCustomSpec(description);
+        String roleInstruction = StrUtil.isNotBlank(customSpec) ? customSpec : description;
+        return StrUtil.format(
+                "你是 OA 数字员工：{}。部门：{}。模板：{}。你的职责说明：{}。已配置能力：{}。能力补充说明：{}。回答时必须优先遵循职责说明，不要凭能力名自行扩展成无关身份；如果信息不足，先澄清再行动；介绍自己时，只能介绍与职责说明一致的能力边界。",
                 agent.getAgentName(),
                 StrUtil.blankToDefault(agent.getDeptName(), "未分配"),
                 StrUtil.blankToDefault(agent.getTemplateType(), "custom"),
-                capabilityText);
+                roleInstruction,
+                capabilityText,
+                StrUtil.blankToDefault(capabilityConditions, "无"));
+    }
+
+    private String extractCustomSpec(String description) {
+        if (StrUtil.isBlank(description)) {
+            return "";
+        }
+        int markerIndex = description.indexOf(CUSTOM_SPEC_MARKER);
+        if (markerIndex < 0) {
+            return "";
+        }
+        return StrUtil.trim(description.substring(markerIndex + CUSTOM_SPEC_MARKER.length()));
     }
 
     private String buildOpenfangDescription(AgentxAgentDO agent,

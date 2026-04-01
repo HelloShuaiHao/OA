@@ -21,6 +21,8 @@ public interface AgentxChannelService {
 
     AgentxChannelAccessEvaluateRespVO evaluateChannelAccess(AgentxChannelAccessEvaluateReqVO reqVO);
 
+    void refreshRuntimeAccessByChannelType(String channelType);
+
     List<AgentxUserChannelBindingRespVO> getMyBindings(Long userId);
 
     void unbind(Long id, Long userId);

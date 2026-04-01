@@ -13,12 +13,18 @@ import cn.iocoder.yudao.module.agentx.dal.mysql.channel.AgentxChannelAgentMapper
 import cn.iocoder.yudao.module.agentx.dal.mysql.channel.AgentxChannelConfigMapper;
 import cn.iocoder.yudao.module.agentx.dal.mysql.channel.AgentxUserChannelBindingMapper;
 import cn.iocoder.yudao.module.agentx.dal.mysql.instance.AgentxOpenfangInstanceMapper;
+import cn.iocoder.yudao.module.agentx.dal.dataobject.instance.AgentxOpenfangInstanceDO;
 import cn.iocoder.yudao.module.agentx.service.instance.OpenfangApiKeyCrypto;
 import cn.iocoder.yudao.module.agentx.service.metrics.AgentxMetricsService;
 import cn.iocoder.yudao.module.system.dal.dataobject.user.AdminUserDO;
 import cn.iocoder.yudao.module.system.service.user.AdminUserService;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.mockito.ArgumentCaptor;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestTemplate;
 
@@ -28,6 +34,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AgentxChannelServiceImplTest {
@@ -106,6 +113,96 @@ class AgentxChannelServiceImplTest {
         assertTrue(respVO.getMessage().contains("不在该 Agent 允许范围内"));
     }
 
+    @Test
+    void shouldSyncTelegramAllowedUsersWhenBindRequired() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxChannelConfigDO channel = new AgentxChannelConfigDO();
+        channel.setId(11L);
+        channel.setChannelType("telegram");
+        channel.setStatus(0);
+        channel.setConfig(internalConfig("all", List.of(), List.of()));
+        channel.setBotTokenEncrypted("b64:dGVsZWdyYW0tdG9rZW4=");
+        when(channelConfigMapper.selectById(11L)).thenReturn(channel);
+
+        AgentxChannelAgentDO relation = new AgentxChannelAgentDO();
+        relation.setChannelId(11L);
+        relation.setAgentId(1L);
+        when(channelAgentMapper.selectListByChannelId(11L)).thenReturn(List.of(relation));
+
+        AgentxAgentDO agent = new AgentxAgentDO();
+        agent.setId(1L);
+        agent.setAgentName("hr-agent");
+        agent.setStatus(1);
+        when(agentMapper.selectById(1L)).thenReturn(agent);
+
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+
+        AgentxUserChannelBindingDO binding = new AgentxUserChannelBindingDO();
+        binding.setUserId(99L);
+        binding.setChannelType("telegram");
+        binding.setChannelUserId("10001");
+        binding.setStatus(1);
+        when(userChannelBindingMapper.selectListByChannelType("telegram")).thenReturn(List.of(binding));
+
+        String endpoint = "https://openfang.company.com/api/telegram/bindings/agentx-channel-11";
+        when(restTemplate.exchange(eq(endpoint), eq(HttpMethod.PATCH), any(HttpEntity.class), eq(Object.class)))
+                .thenReturn(ResponseEntity.ok().build());
+
+        ReflectionTestUtils.invokeMethod(service, "syncChannelToOpenfang", 11L);
+
+        ArgumentCaptor<HttpEntity> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(eq(endpoint), eq(HttpMethod.PATCH), captor.capture(), eq(Object.class));
+        Object body = captor.getValue().getBody();
+        Assertions.assertNotNull(body);
+        @SuppressWarnings("unchecked")
+        List<Long> allowedUsers = (List<Long>) ((java.util.Map<String, Object>) body).get("allowed_users");
+        Assertions.assertEquals(List.of(10001L), allowedUsers);
+    }
+
+    @Test
+    void shouldSyncTelegramBlockingPlaceholderWhenNoBoundUsers() {
+        AgentxChannelServiceImpl service = buildService();
+        AgentxChannelConfigDO channel = new AgentxChannelConfigDO();
+        channel.setId(12L);
+        channel.setChannelType("telegram");
+        channel.setStatus(0);
+        channel.setConfig(internalConfig("all", List.of(), List.of()));
+        channel.setBotTokenEncrypted("b64:dGVsZWdyYW0tdG9rZW4=");
+        when(channelConfigMapper.selectById(12L)).thenReturn(channel);
+
+        AgentxChannelAgentDO relation = new AgentxChannelAgentDO();
+        relation.setChannelId(12L);
+        relation.setAgentId(1L);
+        when(channelAgentMapper.selectListByChannelId(12L)).thenReturn(List.of(relation));
+
+        AgentxAgentDO agent = new AgentxAgentDO();
+        agent.setId(1L);
+        agent.setAgentName("hr-agent");
+        agent.setStatus(1);
+        when(agentMapper.selectById(1L)).thenReturn(agent);
+
+        AgentxOpenfangInstanceDO instance = new AgentxOpenfangInstanceDO();
+        instance.setEndpoint("https://openfang.company.com");
+        when(openfangInstanceMapper.selectListByStatus(1)).thenReturn(List.of(instance));
+        when(userChannelBindingMapper.selectListByChannelType("telegram")).thenReturn(List.of());
+
+        String endpoint = "https://openfang.company.com/api/telegram/bindings/agentx-channel-12";
+        when(restTemplate.exchange(eq(endpoint), eq(HttpMethod.PATCH), any(HttpEntity.class), eq(Object.class)))
+                .thenReturn(ResponseEntity.ok().build());
+
+        ReflectionTestUtils.invokeMethod(service, "syncChannelToOpenfang", 12L);
+
+        ArgumentCaptor<HttpEntity> captor = ArgumentCaptor.forClass(HttpEntity.class);
+        verify(restTemplate).exchange(eq(endpoint), eq(HttpMethod.PATCH), captor.capture(), eq(Object.class));
+        Object body = captor.getValue().getBody();
+        Assertions.assertNotNull(body);
+        @SuppressWarnings("unchecked")
+        List<Long> allowedUsers = (List<Long>) ((java.util.Map<String, Object>) body).get("allowed_users");
+        Assertions.assertEquals(List.of(-1L), allowedUsers);
+    }
+
     private AgentxChannelServiceImpl buildService() {
         AgentxChannelServiceImpl service = new AgentxChannelServiceImpl();
         ReflectionTestUtils.setField(service, "channelConfigMapper", channelConfigMapper);
@@ -135,7 +232,7 @@ class AgentxChannelServiceImplTest {
         AgentxChannelConfigDO channel = new AgentxChannelConfigDO();
         channel.setId(11L);
         channel.setChannelType("telegram");
-        channel.setStatus(1);
+        channel.setStatus(0);
         channel.setConfig(config);
         when(channelConfigMapper.selectListByIds(List.of(11L))).thenReturn(List.of(channel));
 
