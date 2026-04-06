@@ -7,7 +7,10 @@
 
 target/
 !.mvn/wrapper/maven-wrapper.jar
-.mvn/repository/
+**/.mvn/repository/
+
+# Runtime logs
+logs/
 
 .flattened-pom.xml
 
