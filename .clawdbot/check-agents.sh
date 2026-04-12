@@ -106,8 +106,12 @@ while IFS= read -r row; do
   notify_done="$(jq -r '.notifyOnComplete // true' <<<"$row")"
 
   if [[ ! -d "$worktree" ]]; then
-    set_task_fields "$id" "failed" "" "worktree missing" "missing" '{"worktree":false}'
-    echo "Task $id failed: worktree missing"
+    if [[ "$status" == "running" ]]; then
+      set_task_fields "$id" "failed" "" "worktree missing" "missing" '{"worktree":false}'
+      echo "Task $id failed: worktree missing"
+    else
+      echo "Task $id skipped: historical worktree already removed"
+    fi
     continue
   fi
 
