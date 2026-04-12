@@ -1,0 +1,46 @@
+[
+  {
+    "id": "20260412-161727-smoke-test-review",
+    "type": "review",
+    "scope": "backend",
+    "name": "smoke-test-review",
+    "repo": "/Users/mbp/Desktop/OA/ruoyi-vue-pro",
+    "worktree": "/Users/mbp/Desktop/OA/ruoyi-vue-pro/.worktrees/20260412-161727-smoke-test-review",
+    "branch": "agent/review/smoke-test-review",
+    "tmuxSession": "codex-smoke-test-review",
+    "targets": "yudao-server",
+    "verifyCommands": "mvn -pl yudao-server -am -DskipITs test",
+    "status": "awaiting-pr",
+    "retryCount": 0,
+    "prNumber": "",
+    "notifyOnComplete": true,
+    "startedAt": "2026-04-12T08:17:38Z",
+    "note": "agent session ended but no PR detected yet",
+    "ciStatus": "not-checked",
+    "checks": {
+      "prCreated": false,
+      "uiChanged": false,
+      "screenshotsOk": true,
+      "ci": "not-checked",
+      "definitionOfDone": false
+    }
+  },
+  {
+    "id": "20260412-163054-agentx-small-fix",
+    "type": "bugfix",
+    "scope": "backend",
+    "name": "agentx-small-fix",
+    "repo": "/Users/mbp/Desktop/OA/ruoyi-vue-pro",
+    "worktree": "/Users/mbp/Desktop/OA/ruoyi-vue-pro/.worktrees/20260412-163054-agentx-small-fix",
+    "branch": "agent/bugfix/agentx-small-fix",
+    "tmuxSession": "codex-agentx-small-fix",
+    "targets": "yudao-module-agentx",
+    "verifyCommands": "mvn -pl yudao-server -am -DskipITs test",
+    "status": "blocked",
+    "retryCount": 0,
+    "prNumber": "",
+    "notifyOnComplete": true,
+    "startedAt": "2026-04-12T08:31:02Z",
+    "note": "Codex websocket connection hit HTTP 500 during real task run before producing code changes."
+  }
+]
